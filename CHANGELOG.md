@@ -3,6 +3,26 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
+## Unreleased
+
+### Fixed
+
+- **A session stops disappearing from the sidebar after you switch away.** Two
+  separate causes, both silent. The list was capped at 100 sessions globally
+  (`SessionManager.entries` called `list_sessions(limit=100)`) while the
+  sidebar pages each project ten rows at a time — so on a 130-session home the
+  30 oldest rows, all in one project, simply did not exist, and a session just
+  below the cut was visible only while it was current (the placeholder row) and
+  vanished the moment you switched away from it. The cap is gone:
+  `list_sessions(limit=None)` means every session, and the sidebar's list asks
+  for all of them. Separately, a run streaming in a background slot has no
+  transcript on disk yet (messages land at `agent_end`), and the listing only
+  knew the active slot's own current session, so switching to another session
+  or project hid the conversation that was still being written until its turn
+  ended. The host now merges every resident slot's live session into the one
+  `session list` answer (`entries(live=…)`): a placeholder row that never
+  writes to disk and gives way to the real transcript when it lands.
+
 ## v0.15.2 — 2026-11-26
 
 ### Added

@@ -821,7 +821,7 @@ def _session_mtime(path: Path) -> float:
 
 
 def list_sessions(
-    limit: int = 20,
+    limit: int | None = 20,
     *,
     scope: str = "project",
     root: Path | str | None = None,
@@ -840,6 +840,8 @@ def list_sessions(
     ``cache=False`` lists through a read-only index, so the ``_index.json``
     sidecar is never written (an ``approval="read"`` caller must not touch the
     disk); each directory's title sidecar is read once and shared.
+    ``limit=None`` returns every session: a sidebar that pages a project ten
+    rows at a time must not lose the tail to a cap it never asked for.
     """
     if scope not in _SCOPES:
         raise ValueError(f"unknown session scope: {scope!r} (choose project|all)")
@@ -878,7 +880,7 @@ def list_sessions(
             infos.append(info)
         index.flush()
     infos.sort(key=lambda info: info.mtime, reverse=True)
-    return infos[:limit]
+    return infos if limit is None else infos[:limit]
 
 
 def latest_session(

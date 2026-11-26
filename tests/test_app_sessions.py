@@ -260,6 +260,72 @@ async def test_renaming_an_unsaved_session_materializes_it(session_runtime):
     assert manager.entries()[0].title == "Named before typing"
 
 
+async def test_entries_list_every_saved_session(
+    runtime_factory, tmp_path, monkeypatch
+):
+    # The sidebar pages a project ten rows at a time, so a global cap it never
+    # asked for only lost the tail: a session one row below the cut vanished
+    # from the list the moment the person switched away from it.
+    alpha = _enter_project(tmp_path, monkeypatch, "alpha")
+    _rebind_sessions_to_projects(monkeypatch)
+    session_runtime = await runtime_factory(root=alpha)
+    manager = SessionManager(session_runtime)
+    directory = project.project_sessions_dir(root=alpha)
+    directory.mkdir(parents=True, exist_ok=True)
+    saved = [
+        _write_session(directory, f"saved-{index:03}.jsonl", [f"chat {index}"])
+        for index in range(120)
+    ]
+
+    entries = manager.entries()
+
+    listed = {entry.path for entry in entries}
+    assert set(saved) <= listed
+    assert len(entries) == len(saved) + 1  # plus the unsaved current session
+
+
+async def test_entries_include_a_live_session_without_a_transcript(
+    runtime_factory, tmp_path, monkeypatch
+):
+    # A run streaming in a sibling slot has no file yet (the transcript lands
+    # at the turn's end): a listing that only reads files drops it the moment
+    # the person switches away, and the sidebar cannot find the conversation.
+    alpha = _enter_project(tmp_path, monkeypatch, "alpha")
+    _rebind_sessions_to_projects(monkeypatch)
+    session_runtime = await runtime_factory(root=alpha)
+    manager = SessionManager(session_runtime)
+    live = project.project_sessions_dir(root=alpha) / "20260101-000000.jsonl"
+    assert not live.exists()
+
+    entries = manager.entries(scope="all", live=[live])
+
+    row = next(entry for entry in entries if entry.path == live)
+    assert row.current is False
+    assert row.project == "alpha"
+    assert row.project_path == str(alpha.resolve())
+    assert row.title  # localized placeholder, never blank
+    paths = [entry.path for entry in entries]
+    assert paths.index(live) > paths.index(manager.current())  # current stays first
+    assert not live.exists()  # a listing never writes a transcript
+
+
+async def test_entries_do_not_repeat_a_live_session(
+    runtime_factory, tmp_path, monkeypatch
+):
+    alpha = _enter_project(tmp_path, monkeypatch, "alpha")
+    _rebind_sessions_to_projects(monkeypatch)
+    session_runtime = await runtime_factory(root=alpha)
+    manager = SessionManager(session_runtime)
+    saved = _write_session(
+        project.project_sessions_dir(root=alpha), "saved.jsonl", ["chat"]
+    )
+
+    entries = manager.entries(scope="all", live=[saved, manager.current()])
+
+    assert [entry.path for entry in entries].count(saved) == 1
+    assert [entry.path for entry in entries].count(manager.current()) == 1
+
+
 async def test_entries_defaults_to_the_current_project(
     runtime_factory, tmp_path, monkeypatch
 ):
