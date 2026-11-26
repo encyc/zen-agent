@@ -44,6 +44,7 @@ __all__ = [
     "SessionInfo",
     "all_session_dirs",
     "brief",
+    "goal_objective",
     "latest_session",
     "list_sessions",
     "read_session_pins",
@@ -309,7 +310,8 @@ def set_session_pin(session_file: Path, pinned: bool) -> bool:
     return pinned
 
 
-def _goal_objective(text: str) -> str:
+def goal_objective(text: str) -> str:
+    """The ``<objective>`` body of a goal turn; ``""`` when there is none."""
     start = text.find("<objective>")
     if start < 0:
         return ""
@@ -366,7 +368,7 @@ def _title_from_messages(messages: list[Message]) -> str:
                 continue
             return brief(message.content)
     if first_goal:
-        objective = _goal_objective(first_goal)
+        objective = goal_objective(first_goal)
         if objective:
             return brief(objective)
     return "(empty)"
