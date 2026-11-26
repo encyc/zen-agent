@@ -237,11 +237,11 @@ TOTAL_BUDGET_CHARS = 9000
 # 4800 -> 5200: the read-before-write gate adds its contract to read_file,
 # write_file and edit_file (prompt CHANGELOG 2026-11-07.1); single-tool caps
 # are untouched.
-# 5200 -> 6400 -> 6600: three cross-session tools (2026-11-26 session search).
-# Their descriptions measure 1442, because two facts earn their chars: the
-# regex is case-sensitive (a model that assumes otherwise burns a round trip on
-# "no matches") and the search is project-scoped unless all=true (a worktree
-# has its own project key, so its history looks empty). With all 17
-# descriptions the measured total is 6450: 150 chars of real headroom.
-TOOL_TOTAL_BUDGET_CHARS = 6600
+# 5200 -> 20000: the ceiling exists to stop description bloat, not to ration
+# it. Fourteen tools lived inside 5200 because each was terse; the three
+# cross-session tools (2026-11-26) need room to describe escalation levels, and
+# the next capability should not have to negotiate for a few hundred chars.
+# 20000 leaves the per-tool cap (below) as the constraint that actually shapes
+# a description: 17 tools at their 900-char ceiling would total ~15300.
+TOOL_TOTAL_BUDGET_CHARS = 20000
 TOOL_BUDGET_CHARS = 900
