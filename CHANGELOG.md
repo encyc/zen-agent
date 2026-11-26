@@ -3,7 +3,7 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
-## Unreleased
+## v0.15.4 — 2026-11-26
 
 ### Fixed
 
@@ -17,7 +17,7 @@ matches the release tag; older history is in the repository tags and commits.
   `model`) stays strict. The desktop applies the same rule to a stored bare pref
   from its own catalog before replaying it.
 
-## v0.15.3 — 2026-11-27
+## v0.15.3 — 2026-11-26
 
 ### Added
 
