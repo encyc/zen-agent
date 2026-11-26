@@ -256,7 +256,16 @@ async def compact(
         SystemMessage(content=system_prompt, timestamp=now),
         UserMessage(content=user_prompt, timestamp=now),
     ]
-    options = StreamOptions(api_key=agent.api_key, thinking=None)
+    # The summarizer is a second caller of the provider, not a special case: it
+    # must carry the session id the loop sends, or a gateway that routes on it
+    # (opencode-go) refuses the request with a 400 while every normal turn works.
+    # No abort token here: `_Run` mints one per run and compaction is not a run,
+    # so inheriting one would tie it to a finished turn.
+    options = StreamOptions(
+        api_key=agent.api_key,
+        thinking=None,
+        session_id=agent.session_id,
+    )
     fn = stream_fn or agent.stream_fn or stream_fn_for(agent.model)
 
     summary = ""

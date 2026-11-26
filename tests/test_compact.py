@@ -506,3 +506,66 @@ def test_manual_keep_recent_scales_and_is_capped():
 
     huge = [UserMessage(content="z" * 8000, timestamp=index) for index in range(60)]
     assert manual_keep_recent(huge) == KEEP_RECENT_TOKENS, "the auto cap still applies"
+
+
+async def test_compact_forwards_the_agent_session_id_to_the_provider(
+    isolated_sessions,
+):
+    """A gateway that routes on the session id needs it on the summary call too.
+
+    The OpenAI-compatible provider only sends `x-opencode-session` when
+    `options.session_id` is set; the summarizer built its own StreamOptions and
+    dropped the field, so `/compact` failed with a 400 on opencode-go while
+    every normal turn worked.
+    """
+    seen: list = []
+
+    async def stream(model_, messages, tools, options):
+        seen.append(options)
+        async for event in summary_stream("summary")(model_, messages, tools, options):
+            yield event
+
+    agent = Agent(
+        model(), "system", api_key="k", stream_fn=stream, session_id="sess-abc"
+    )
+    agent.replace_messages(
+        [
+            UserMessage(content="改一下", timestamp=1),
+            AssistantMessage(
+                content=[TextContent(text="好")],
+                provider="test",
+                model="m",
+                usage=Usage(),
+                stop_reason="stop",
+                timestamp=2,
+            ),
+        ]
+    )
+    session = live_session(agent, isolated_sessions)
+    await compact(agent, session, reason="manual")
+
+    assert seen, "the summarizer never called the provider"
+    assert seen[0].session_id == "sess-abc"
+
+
+async def test_compact_sends_no_abort_token_because_no_run_owns_it(
+    isolated_sessions,
+):
+    """The summarizer runs outside any agent run, so it has no token to inherit.
+
+    Pinned rather than ignored: `_Run` mints a fresh AbortToken per run and
+    compaction is not one of those, so an inherited token would be a token from
+    a finished run -- and cancelling compaction has to stay the caller's
+    decision, not a side effect of the previous turn's abort.
+    """
+    seen: list = []
+
+    async def stream(model_, messages, tools, options):
+        seen.append(options)
+        async for event in summary_stream("summary")(model_, messages, tools, options):
+            yield event
+
+    agent = agent_with_history(stream)
+    session = live_session(agent, isolated_sessions)
+    await compact(agent, session, reason="manual")
+    assert seen[0].abort is None
