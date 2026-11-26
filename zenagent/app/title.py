@@ -61,6 +61,26 @@ _WRAPPERS = "\"'“”‘’「」『』《》`*"
 #: Sentence punctuation a bare name should not end with.
 _TRAILING = "。．.!！?？,，;；:：、…"
 
+#: Words that turn the text before a colon into a label, not part of the name.
+_LABEL_WORDS = ("会话", "标题", "名字", "名称", "Title", "title", "name", "Name")
+
+#: A label clause longer than this is prose ("我读了那段对话，觉得可以叫：…").
+_LABEL_HEAD_LIMIT = 20
+
+
+def _strip_label_clause(line: str) -> str:
+    """Drop a short meta clause in front of the name ("这个会话可以叫：…")."""
+    for separator in ("：", ":"):
+        head, found, tail = line.partition(separator)
+        if (
+            found
+            and tail.strip()
+            and len(head) <= _LABEL_HEAD_LIMIT
+            and any(word in head for word in _LABEL_WORDS)
+        ):
+            return tail.strip()
+    return line
+
 
 def clean_title(raw: str) -> str:
     """One provider reply -> a display name; ``""`` means give up.
@@ -85,9 +105,14 @@ def clean_title(raw: str) -> str:
         if line.startswith(prefix):
             line = line[len(prefix) :].strip()
             break
-    line = line.strip(_WRAPPERS).strip()
+    line = _strip_label_clause(line)
     line = " ".join(line.split())
-    line = line.rstrip(_TRAILING).strip()
+    # Wrappers and sentence punctuation nest ("「名字」。"), so alternate the two
+    # strips until the line stops changing instead of running each once.
+    previous = None
+    while previous != line:
+        previous = line
+        line = line.strip(_WRAPPERS).strip().rstrip(_TRAILING).strip()
     if len(line) > AUTO_TITLE_LIMIT:
         line = line[:AUTO_TITLE_LIMIT].rstrip()
     return line

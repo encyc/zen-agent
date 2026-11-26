@@ -18,6 +18,10 @@ from zenagent.app.title import AUTO_TITLE_LIMIT, clean_title
         ("Title: login retry fix", "login retry fix"),
         ("```\n登录重试修复\n```", "登录重试修复"),
         ("登录重试修复。", "登录重试修复"),
+        ("这个会话可以叫：登录重试修复。", "登录重试修复"),
+        ('"登录重试修复"。', "登录重试修复"),
+        ("「登录重试修复」。", "登录重试修复"),
+        ("**登录重试修复**。", "登录重试修复"),
         ("登录重试修复\n\n说明：这是会话名", "登录重试修复"),
         ("  登录   重试  ", "登录 重试"),
         ("", ""),
@@ -221,10 +225,42 @@ async def test_prepare_attaches_the_titler(app_env, tmp_path) -> None:
 
 
 async def test_close_lands_an_inflight_title(app_env, tmp_path) -> None:
+    """Shutdown waits for a naming call that is still in flight."""
+    gate = asyncio.Event()
+    inner = text_stream("登录重试修复")
+
+    async def stream(model, messages, tools, options):
+        if options.max_tokens == TITLE_MAX_TOKENS:
+            await gate.wait()
+        async for event in inner(model, messages, tools, options):
+            yield event
+
     prepared = await prepare(_offline_options(app_env), views=False)
     runtime = prepared.runtime
-    runtime.agent.stream_fn = text_stream("登录重试修复")
+    runtime.agent.stream_fn = stream
     await runtime.agent.prompt("帮我修一下")
-    await runtime.close()
+
+    closing = asyncio.create_task(runtime.close())
+    await asyncio.sleep(0.05)
+    assert not closing.done()  # close() is waiting on the title call, not dropping it
+    gate.set()
+    await closing
+
     assert session_title(runtime.session.path) == "登录重试修复"
     assert runtime.auto_titler is None
+
+
+async def test_an_injected_stream_disables_naming(app_env, tmp_path) -> None:
+    """A caller-supplied provider owns its calls; naming must not surprise it."""
+    calls: list = []
+    prepared = await prepare(
+        _offline_options(app_env),
+        stream_fn=_recording_stream("不该出现", calls),
+        views=False,
+    )
+    runtime = prepared.runtime
+    assert runtime.auto_titler is None
+    await runtime.agent.prompt("帮我改一下")
+    await runtime.close()
+    assert read_session_titles(runtime.session.path.parent) == {}
+    assert all(options.max_tokens != TITLE_MAX_TOKENS for options, _ in calls)

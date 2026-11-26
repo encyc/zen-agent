@@ -4,6 +4,19 @@ Every content change bumps `PROMPT_VERSION` (`zenagent/prompts/spec.py`) and get
 one entry here: what changed, why, and the experiment/report that justified it.
 P0 extracted the v0.4.1 text verbatim — no behavior change.
 
+## 2026-11-26.3 — a new session names itself
+
+- Two blocks are new: `title.system` (134 chars) and `title.user` (31 chars) —
+  the prompt for the second provider call that turns a session's first user
+  message into a display name. They never join the system prompt; the cache
+  class records provenance only. Budgets 400 / 200 are headroom for rewording,
+  not measured sizes.
+- Why a second call: the derived name today is the first 40 characters of the
+  first message (`session.py::brief`), which reads as a truncated sentence in
+  the sidebar. Naming is best-effort: a failed call leaves the derived name,
+  and `/rename` always wins.
+- No existing block changed, so no budget moved.
+
 ## 2026-11-26.2 — the agent can read its own history
 
 - Three tool blocks are new: `tool.list_sessions`, `tool.search_sessions`,
