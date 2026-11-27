@@ -3,6 +3,35 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
+## v0.15.6 — 2026-11-27
+
+### Added
+
+- **New sessions name themselves.** The first user message of a new session now
+  goes to one small background provider call (`max_tokens` 128) that summarises
+  it into a display name — roughly ten Chinese characters, five or six English
+  words — and writes it into the existing `.titles.json` sidecar. Every surface
+  already reads a title, so the desktop sidebar and topbar, the TUI picker and
+  `zen --list-sessions` all show it with no new plumbing. The call runs off the
+  event loop, so it never delays the first token; it is skipped when the session
+  already has a stored title, has run before, or holds more than one user
+  message; failure is silent and falls back to the first line as before; and it
+  is off entirely when a caller injects its own `stream_fn` (tests, SDK
+  embeddings), so no second provider call shows up on someone else's bill.
+  `/rename` still wins: a hand-picked name is never overwritten.
+
+### Fixed
+
+- **A naming reply that talks first is not taken literally.** "这个会话可以叫：
+  抖音日报" and 「名字」。 used to land in the sidebar raw; a short label clause
+  in front of the name is now dropped and quote/punctuation wrappers are stripped
+  repeatedly, so nested decoration resolves. `Runtime.close()` also waits for an
+  in-flight naming call instead of dropping it.
+- **The TUI's job-log poll no longer dies on a screen that has not composed
+  yet.** The one-second status tick can land between `push_screen` and the
+  first compose, where the widgets do not exist; the snapshot is stored either
+  way and the screen renders the latest one when it mounts.
+
 ## v0.15.5 — 2026-11-26
 
 ### Fixed
