@@ -630,7 +630,10 @@ async def test_system_prompt_stays_compact():
         ["read_file", "write_file", "edit_file", "list_dir", "bash", "glob", "grep", "todo"]
     )
 
-    assert len(prompt.split()) < 220, "the tool policy section must stay short"
+    # 220 -> 224: the specialized list names one more tool (read_image,
+    # 2026-11-28.2). The wall is the policy section's word count; the next
+    # tool hits it again, and the honest response is the same trade.
+    assert len(prompt.split()) < 224, "the tool policy section must stay short"
 
 
 async def test_todo_runs_through_the_agent_loop(runtime_factory):

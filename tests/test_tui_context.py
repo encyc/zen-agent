@@ -81,7 +81,11 @@ async def test_context_section_shows_zero_before_the_first_turn(fake_runtime):
 
         section = _section(app)
         assert section.display is True
-        assert "ctx 0%" in section.query(SidebarRow)[0].plain
+        # The empty-session reading is the system prompt's own estimate, and it
+        # rounds to 0% or 1% as the tool roster grows the prompt (read_image,
+        # 2026-11-28.2, pushed it to 1%). Pin the tiny band, not one string.
+        head = section.query(SidebarRow)[0].plain
+        assert head.split("·")[0].strip() in ("ctx 0%", "ctx 1%"), head
 
 
 async def test_clicking_the_context_row_opens_the_breakdown(
