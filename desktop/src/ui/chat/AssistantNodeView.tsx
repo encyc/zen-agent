@@ -13,6 +13,7 @@ import { formatDuration } from '../format'
 import { thinkingPreview } from './thinkingPreview'
 import { useMarkdown } from './markdown'
 import { externalLinkAction } from './markdownLinks'
+import { useCheckedFileRefs } from '../../state/fileExistence'
 import { openExternal } from '../../rpc/client'
 import { TurnActions } from './TurnActions'
 import css from './AssistantNodeView.module.css'
@@ -31,11 +32,12 @@ export function AssistantNodeView({
   const t = useT()
   const showThinking = useSettingsStore((state) => state.showThinking)
   const autoCollapseThinking = useSettingsStore((state) => state.autoCollapseThinking)
-  const html = useMarkdown(
-    node.text,
-    { copy: t('chat.copy'), copied: t('chat.copied') },
-    { fileLinks: true },
-  )
+  const labels = { copy: t('chat.copy'), copied: t('chat.copied') }
+  // First render links every ref (the probe has not answered yet); once the
+  // existence store settles, refs to paths that are not there go plain.
+  const probedHtml = useMarkdown(node.text, labels, { fileLinks: true })
+  const missingPaths = useCheckedFileRefs(probedHtml)
+  const html = useMarkdown(node.text, labels, { fileLinks: true, missingPaths })
   const hasThinking = node.thinking !== null && node.thinking.trim() !== ''
   const duration = node.durationMs !== null ? formatDuration(node.durationMs) : ''
 
@@ -144,12 +146,12 @@ function ThinkingRow({
   const t = useT()
   const [open, setOpen] = useState(running || !autoCollapse)
   // Reasoning is model markdown like the body: it renders through the same
-  // sanitizer, so code fences, lists and file references behave identically.
-  const html = useMarkdown(
-    text,
-    { copy: t('chat.copy'), copied: t('chat.copied') },
-    { fileLinks: true },
-  )
+  // sanitizer, so code fences, lists, file references and their existence
+  // verdicts behave identically.
+  const labels = { copy: t('chat.copy'), copied: t('chat.copied') }
+  const probedHtml = useMarkdown(text, labels, { fileLinks: true })
+  const missingPaths = useCheckedFileRefs(probedHtml)
+  const html = useMarkdown(text, labels, { fileLinks: true, missingPaths })
   const summary = useMemo(() => thinkingPreview(text) || t('thinking.label'), [text, t])
   // A live row stays open; a settled row follows the preference.
   useEffect(() => {

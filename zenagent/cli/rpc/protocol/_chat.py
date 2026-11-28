@@ -304,6 +304,10 @@ OPS: dict[str, OpSpec] = {
 "truncated": Field(BOOL),
     }),
     "fs_read": OpSpec("fs_read", FsPathRequest, {"file": Field(ref("FilePayload"))}),
+    "fs_exists": OpSpec("fs_exists", FsPathRequest, {
+"path": Field(STRING),
+"exists": Field(BOOL),
+    }),
     "fs_index": OpSpec("fs_index", NoFields, {
 "entries": Field(list_of(ref("IndexEntry"))),
 "truncated": Field(BOOL),

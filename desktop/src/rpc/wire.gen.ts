@@ -483,6 +483,10 @@ export interface FsReadRequest {
   path?: string
 }
 
+export interface FsExistsRequest {
+  path?: string
+}
+
 export interface GitChangesRequest {
   worktree?: string
 }
@@ -601,6 +605,14 @@ export interface FsReadResult {
   id: string
   ok: true
   file: FilePayload
+}
+
+export interface FsExistsResult {
+  type: 'result'
+  id: string
+  ok: true
+  path: string
+  exists: boolean
 }
 
 export interface FsIndexResult {

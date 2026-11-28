@@ -123,6 +123,19 @@ def list_directory(root: Path | str, path: str | None = "") -> dict:
     return {"path": _relative(base, target), "entries": entries, "truncated": truncated}
 
 
+def path_exists(root: Path | str, path: str | None) -> dict:
+    """Whether ``path`` (relative to ``root``) names an existing file or folder.
+
+    The desktop's chat linkifies file references; this is the cheap probe that
+    keeps references to paths that are not there from becoming links. A path
+    that escapes the workspace still raises like every other fs op — the
+    caller treats the refusal as a verdict, not a crash.
+    """
+    base = Path(root).expanduser().resolve()
+    target = _resolve(base, path)
+    return {"path": _relative(base, target), "exists": target.exists()}
+
+
 def read_file(root: Path | str, path: str) -> dict:
     """Text, image or binary content for one file inside the workspace."""
     base = Path(root).expanduser().resolve()

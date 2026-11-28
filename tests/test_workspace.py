@@ -10,6 +10,7 @@ import pytest
 
 from zenagent.app.workspace import (
     list_directory,
+    path_exists,
     read_file,
     workspace_files,
     worktree_overview,
@@ -236,3 +237,16 @@ def test_a_symlinked_directory_stays_a_file_and_never_crashes(tmp_path, monkeypa
     listing = list_directory(root, "")
     entry = next(item for item in listing["entries"] if item["name"] == "link")
     assert entry["kind"] == "file"
+
+
+def test_path_exists_sees_files_folders_and_the_root(project: Path) -> None:
+    assert path_exists(project, "src/main.ts")["exists"] is True
+    assert path_exists(project, "src")["exists"] is True
+    assert path_exists(project, "missing.txt")["exists"] is False
+    assert path_exists(project, "")["exists"] is True
+    assert path_exists(project, "src/main.ts")["path"] == "src/main.ts"
+
+
+def test_path_exists_refuses_paths_outside_the_project(project: Path) -> None:
+    with pytest.raises(ValueError, match="escapes the workspace"):
+        path_exists(project, "../secret")

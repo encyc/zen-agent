@@ -50,6 +50,7 @@ export const REQUEST_KINDS = [
   'command',
   'commands',
   'follow_up',
+  'fs_exists',
   'fs_index',
   'fs_list',
   'fs_read',
@@ -284,6 +285,14 @@ export interface FsReadResult {
   id: string
   ok: true
   file: WorkspaceFile
+}
+
+export interface FsExistsResult {
+  type: 'result'
+  id: string
+  ok: true
+  path: string
+  exists: boolean
 }
 
 // ---- git review panel --------------------------------------------------------

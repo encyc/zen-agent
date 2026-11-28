@@ -15,6 +15,19 @@ export interface MarkdownLabels {
 export interface MarkdownOptions {
   /** Render workspace file paths as links into the work panel's Files tab. */
   fileLinks?: boolean
+  /** Existence verdicts from the file-existence store (path → exists). A
+   * reference whose path is known missing renders as plain text — no chip,
+   * no click, no panel error on a path that was never there. */
+  missingPaths?: Readonly<Record<string, boolean>>
+}
+
+/** A ref this message should keep plain: the store has settled a `false`
+ * verdict for it. Everything else (no verdict, verdict true) stays a link. */
+function isKnownMissing(
+  path: string,
+  missingPaths: MarkdownOptions['missingPaths'],
+): boolean {
+  return missingPaths?.[path] === false
 }
 
 export function escapeHtml(text: string): string {
@@ -58,22 +71,27 @@ export function markdownToHtml(
   if (options.fileLinks === true) {
     renderer.codespan = ({ text: code }) => {
       const path = parseFileRef(code)
-      return path === null ? `<code>${escapeHtml(code)}</code>` : fileRefHtml(path, code)
+      if (path === null || isKnownMissing(path, options.missingPaths)) {
+        return `<code>${escapeHtml(code)}</code>`
+      }
+      return fileRefHtml(path, code)
     }
   }
   // A destination is an explicit reference: a local path (folder or file,
   // extension or not) never becomes a native anchor — the transcript turns
   // it into a panel reference when enabled, otherwise it keeps just its
-  // label. A remote target opens outside the shell so the app is never
-  // navigated away. The parser is bound at parse time, so the default
-  // renderer is captured for every anchor.
+  // label. A local path known missing keeps just its label too: no chip for
+  // a file that is not there. A remote target opens outside the shell so the
+  // app is never navigated away. The parser is bound at parse time, so the
+  // default renderer is captured for every anchor.
   const defaultLink = renderer.link.bind(renderer)
   renderer.link = function (token) {
     const local = parseLinkRef(token.href)
     if (local !== null) {
-      return options.fileLinks === true
-        ? fileRefHtml(local, this.parser.parseInline(token.tokens))
-        : this.parser.parseInline(token.tokens)
+      if (!isKnownMissing(local, options.missingPaths) && options.fileLinks === true) {
+        return fileRefHtml(local, this.parser.parseInline(token.tokens))
+      }
+      return this.parser.parseInline(token.tokens)
     }
     const href = token.href.trim()
     if (href === '' || href.startsWith('#')) return defaultLink(token)
@@ -103,9 +121,11 @@ export function useMarkdown(
   options: MarkdownOptions = {},
 ): string {
   const fileLinks = options.fileLinks === true
+  const missingPaths = options.missingPaths
   return useMemo(
-    () => renderMarkdown(text, { copy: labels.copy, copied: labels.copied }, { fileLinks }),
-    [text, labels.copy, labels.copied, fileLinks],
+    () =>
+      renderMarkdown(text, { copy: labels.copy, copied: labels.copied }, { fileLinks, missingPaths }),
+    [text, labels.copy, labels.copied, fileLinks, missingPaths],
   )
 }
 

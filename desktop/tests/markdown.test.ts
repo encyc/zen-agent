@@ -109,3 +109,48 @@ test('a fragment link keeps the page and needs no new window', () => {
   assert.match(html, /<a href="#top">top<\/a>/)
 })
 
+
+test('a ref whose path is known missing stays plain code', () => {
+  const html = markdownToHtml('see `src/a.ts` now', labels, {
+    fileLinks: true,
+    missingPaths: { 'src/a.ts': false },
+  })
+
+  assert.match(html, /<code>src\/a\.ts<\/code>/)
+  assert.doesNotMatch(html, /md-file-ref/)
+})
+
+test('a known-missing local link keeps its label without a chip or anchor', () => {
+  const html = markdownToHtml('see [rpc](zenagent/cli/rpc) now', labels, {
+    fileLinks: true,
+    missingPaths: { 'zenagent/cli/rpc': false },
+  })
+
+  assert.doesNotMatch(html, /md-file-ref/)
+  assert.doesNotMatch(html, /<a /)
+  assert.match(html, /see rpc now/)
+})
+
+test('an existing verdict or a missing verdict keeps the chip clickable', () => {
+  const existing = markdownToHtml('see `src/a.ts` now', labels, {
+    fileLinks: true,
+    missingPaths: { 'src/a.ts': true },
+  })
+  assert.match(existing, /md-file-ref/)
+
+  const unprobed = markdownToHtml('see `src/a.ts` now', labels, {
+    fileLinks: true,
+    missingPaths: {},
+  })
+  assert.match(unprobed, /md-file-ref/)
+})
+
+test('line-suffix refs are suppressed by the file path alone', () => {
+  const html = markdownToHtml('see `src/a.ts:37` now', labels, {
+    fileLinks: true,
+    missingPaths: { 'src/a.ts': false },
+  })
+
+  assert.match(html, /<code>src\/a\.ts:37<\/code>/)
+  assert.doesNotMatch(html, /md-file-ref/)
+})

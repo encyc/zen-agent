@@ -526,6 +526,8 @@ class RpcServer(
             return self._fs_request(request, request_id, "list")
         if kind == "fs_read":
             return self._fs_request(request, request_id, "read")
+        if kind == "fs_exists":
+            return self._fs_request(request, request_id, "exists")
         if kind == "fs_index":
             await self._fs_index(request_id)
             return True

@@ -717,6 +717,16 @@ export function installBridge(state: BridgeState) {
         if (file === undefined) return { type: 'error', message: 'not found' }
         return { type: 'result', id: payload.id, ok: true, file }
       }
+      case 'fs_exists': {
+        const path = String(payload.path ?? '')
+        return {
+          type: 'result',
+          id: payload.id,
+          ok: true,
+          path,
+          exists: state.fsFiles?.[path] !== undefined,
+        }
+      }
       case 'memory': {
         const entries = state.memory ?? []
         if (payload.op === 'list') {

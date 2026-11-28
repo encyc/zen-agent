@@ -64,7 +64,7 @@ GUI(Tauri) ── zen rpc sidecar(JSONL) ──► RpcHost(多项目) ──► 
 
 slot 级 kind（`RpcServer`）：`hello` `prompt` `cancel` `status` `shutdown` `steer` `follow_up`
 `tools` `models` `commands` `transcript` `subagent_transcript` `model` `mode` `usage` `approval`
-`ask` `session` `command` `fs_list` `fs_read` `fs_index` `memory` `git_worktrees` `secrets`
+`ask` `session` `command` `fs_list` `fs_read` `fs_exists` `fs_index` `memory` `git_worktrees` `secrets`
 `skills` `prefs`/`set_pref` `limits` `plugins` `mcp` `project`
 
 宿主级 kind（`RpcHost`）：`project` `terminal` `runs`

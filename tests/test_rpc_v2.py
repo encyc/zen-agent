@@ -2057,6 +2057,43 @@ async def test_fs_requests_read_the_project_directory(runtime_factory, tmp_path,
     assert results["r"]["file"]["text"] == "export const value = 1\n"
 
 
+async def test_fs_exists_reports_files_and_folders_without_reading_them(
+    runtime_factory, tmp_path, monkeypatch
+):
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "main.ts").write_text("export const value = 1\n", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+
+    _runtime, server, writes, queue = await build(runtime_factory)
+    await run_lines(
+        server,
+        queue,
+        [
+            {"type": "fs_exists", "id": "f", "path": "src/main.ts"},
+            {"type": "fs_exists", "id": "d", "path": "src"},
+            {"type": "fs_exists", "id": "m", "path": "missing.txt"},
+            {"type": "fs_exists", "id": "r", "path": ""},
+        ],
+    )
+    results = {message["id"]: message for message in decode(writes)}
+    assert results["f"]["exists"] is True
+    assert results["d"]["exists"] is True
+    assert results["m"]["exists"] is False
+    # The workspace root itself exists: a reference to the project links too.
+    assert results["r"]["exists"] is True
+
+
+async def test_fs_exists_refuses_paths_outside_the_project_like_fs_read(
+    runtime_factory, tmp_path, monkeypatch
+):
+    monkeypatch.chdir(tmp_path)
+    _runtime, server, writes, queue = await build(runtime_factory)
+    await run_lines(server, queue, [{"type": "fs_exists", "id": "e", "path": "../secret"}])
+    payload = decode(writes)[0]
+    assert payload["type"] == "error"
+    assert payload["code"] == "fs_error"
+
+
 async def test_fs_index_lists_the_workspace_for_the_at_menu(
     runtime_factory, tmp_path, monkeypatch
 ):

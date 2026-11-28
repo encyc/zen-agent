@@ -8,6 +8,7 @@ from dataclasses import asdict
 from zenagent.agent.memory_store import MemoryStore
 from zenagent.app.workspace import (
     list_directory,
+    path_exists,
     read_file,
     workspace_files,
 )
@@ -52,6 +53,8 @@ class FilesOps:
         try:
             if op == "list":
                 payload = list_directory(self.cwd, path)
+            elif op == "exists":
+                payload = path_exists(self.cwd, path)
             else:
                 payload = {"file": read_file(self.cwd, path)}
         except (OSError, ValueError) as exc:
