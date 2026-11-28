@@ -5,6 +5,47 @@ matches the release tag; older history is in the repository tags and commits.
 
 ## Unreleased
 
+### Added
+
+- **The ask card folds to one status row.** A chevron at the right of the
+  status strip collapses the card to icon · title · `1/3` · progress dots ·
+  queued count, and the progress dots keep working while folded — clicking one
+  unfolds the card onto that question. The folded flag rides the per-request
+  draft beside the answers, so a remount or a session snapshot refresh cannot
+  pop it back open, and it never carries into the next request; new questions
+  arrive expanded. The disclosure is the todo dock's
+  `grid-template-rows: 0fr → 1fr` transition, so the two surfaces open at the
+  same beat.
+
+### Changed
+
+- **The ask card is a transcript row, not a layer over it.** It used to ride
+  the floating composer dock: fine while the reader sat at the tail, but once
+  they scrolled up looking for context the card kept hanging over the lower
+  half of the reading area. It now renders inside the transcript's scroll
+  area, so scrolling up scrolls it away and the reader gets the full viewport
+  back; at the tail it sits below the last message, pushing the conversation up
+  rather than covering it. Card growth (unfolding, a growing multi-select, the
+  free-text input appearing, moving to a longer question) re-pins the scroll
+  while the view is following the tail, so a card that grows cannot land out of
+  sight. Its measured height is published as `--ask-card-height`, which the
+  jump pill, the conversation minimap and the chat-width handles subtract on
+  top of the composer dock's own reservation, so no floating surface ends up on
+  top of the card — and the variable returns to `0px` when a pane stops hosting
+  the card, rather than leaving that pane's overlays parked above empty space.
+  Split panes host exactly one card, the focused one, because the ask queue is
+  global and an untagged request would otherwise render in every pane and be
+  answerable twice.
+- **The ask card is smaller and denser.** The question went 16px → 14px, option
+  rows 9/12px → 7/10px of padding with a 5px gap, section spacing tightened and
+  the option list's cap 340px → 200px, which takes roughly a third off the
+  card's height. Selection fills, the recommendation pill and the focus rings
+  are unchanged: the whitespace got tighter, not the information.
+- **A pending question keeps a way back.** With the card inside the scroll
+  area, scrolling up hides it entirely, so the jump pill stays up whenever a
+  question is waiting — in any scroll mode, not only after leaving the tail —
+  and relabels itself for that case. Clicking it returns to the card.
+
 ### Fixed
 
 - **Subagents no longer fail on a gateway that routes by session id.** The
