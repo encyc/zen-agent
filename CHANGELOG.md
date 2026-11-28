@@ -3,6 +3,54 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
+## v0.15.8 — 2026-11-28
+
+### Added
+
+- **The agent can look at images: `read_image`.** Every human-facing image
+  entry point (`/image`, composer paste, `--image`) already existed, but the
+  one an agent actually needs — its own screenshots — had no door: `read_file`
+  refuses all binaries, so a Playwright capture was invisible to the very
+  model that took it. `read_image` views one image file (png/jpeg/gif/webp, up
+  to 5 MB, extension-independent magic-byte sniffing) and returns it as a real
+  image block, so a vision model describes what it captured in the same turn.
+  It is the twelfth builtin tool and rides the same permission tier as
+  `read_file`: an unfenced workspace read, with protected-credential paths
+  still confirming. `read_file` now recognizes an image and redirects instead
+  of refusing — the refusal names `read_image`, so the model self-corrects
+  without losing a round-trip, and a text-only model receives the usual
+  placeholder rather than the bytes.
+- **Vision flags follow a live probe, not folklore.** `supports_vision` gated
+  every image path, and the flags were guesses; the session forensics that
+  motivated `read_image` found zero images reaching any model across 107
+  session files. Each catalog endpoint was probed with a tiny synthetic image
+  through zen's own adapters: `zai-coding-cn/glm-5.3-flash`,
+  `opencode-go/claude-haiku-5-5` and `opencode-go/deepseek-v4.1-flash` answer
+  and are now flagged true; the two text-only endpoints still reject with
+  HTTP 400, where the downgrade path keeps their transcripts honest.
+- **The read_image card previews its picture when expanded.** The folded tool
+  row stays exactly as it was; opening the body fires one `fs_read` for the
+  tool's path and renders the picture above the IN/OUT card — no bytes move
+  until the person asks. Clicking the preview opens a zoomable lightbox
+  scoped to the chat pane (the sidebar and the work rail keep their space):
+  wheel or trackpad-pinch zooms exponentially around the cursor (1–8×,
+  clamped so the picture never leaves the pane), dragging pans once zoomed,
+  double-click resets, a plain click or Escape closes. The zoom and pan math
+  is pure and tested, including the honest special case: an axis whose
+  picture has no overflow pins to center rather than opening empty bands.
+- **Chat file references to paths that are not there stay plain text.** The
+  transcript linkifies workspace paths into the Files panel, and a reference
+  to a missing file opened onto a could-not-read note. A new `fs_exists` op
+  (a cheap stat through the same sanitized resolve as its sibling fs ops; a
+  path outside the workspace refuses with the usual `fs_error`, which the
+  client counts as a verdict) feeds an existence store: known-missing
+  references render as plain code — no chip, no click — in both inline paths
+  and local markdown links, with `file.py:37` checked by its file. Absence of
+  a verdict keeps the link, since a failed transport is not evidence of
+  absence. Accepted trade, confirmed with the request: a message that
+  rendered while its file was missing stays plain even after the file
+  appears.
+
 ## v0.15.7 — 2026-11-28
 
 ### Added
