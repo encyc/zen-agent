@@ -2,7 +2,7 @@
  * title, summary, state cue, duration/diff totals suffix, and a lazily
  * mounted body (diff block, terminal-ish output, or IN/OUT card). */
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import clsx from 'clsx'
 import type { ToolNode } from '../../state/chatStore'
 import { useAppStore } from '../../state/appStore'
@@ -158,24 +158,28 @@ export function ToolRowView({ node }: { node: ToolNode }) {
   const Icon = FAMILY_ICONS[node.name] ?? FileIcon
   const family = TOOL_FAMILIES[node.name]
   const target = useMemo(() => readImageTarget(node), [node])
+  const imagePath = target === null ? null : target.path
   const [image, setImage] = useState<WorkspaceFile | null>(null)
   const [imageState, setImageState] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
+  const fetchStarted = useRef(false)
 
   // The image loads on first expansion (user request): the folded card stays
   // as-is and no bytes move until the person opens the body. One fetch per
-  // card — `imageState` leaves `idle` and never returns, so collapse/reopen
-  // reuses what already arrived.
+  // card, guarded by a ref — the guard must NOT be `imageState` in the dep
+  // array, and the fetch must carry no stale-flag cleanup: setting
+  // `loading` re-renders and re-runs the effect, whose cleanup would mark
+  // the in-flight request stale before its answer lands (the endless-
+  // loading bug this replaces). React drops setState after unmount anyway.
   useEffect(() => {
-    if (!open || target === null || imageState !== 'idle') return
-    let stale = false
+    if (!open || imagePath === null || fetchStarted.current) return
+    fetchStarted.current = true
     setImageState('loading')
-    const path = toWorkspacePath(target.path, useAppStore.getState().project)
+    const path = toWorkspacePath(imagePath, useAppStore.getState().project)
     useAppStore
       .getState()
       .client()
       .send<FsReadResult>({ type: 'fs_read', path }, 8000)
       .then((result) => {
-        if (stale) return
         // read_image only ever produces images, but the file may have changed
         // since the call ran; anything else reads as a failed preview.
         if (result.ok === true && result.file.kind === 'image') {
@@ -185,13 +189,8 @@ export function ToolRowView({ node }: { node: ToolNode }) {
           setImageState('error')
         }
       })
-      .catch(() => {
-        if (!stale) setImageState('error')
-      })
-    return () => {
-      stale = true
-    }
-  }, [open, target, imageState])
+      .catch(() => setImageState('error'))
+  }, [open, imagePath])
 
   return (
     <div
