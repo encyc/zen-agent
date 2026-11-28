@@ -11,7 +11,6 @@ slot's server.
 
 from __future__ import annotations
 
-import asyncio
 import json
 from collections import OrderedDict
 from collections.abc import Callable
@@ -27,9 +26,9 @@ from zenagent.cli.rpc.errors import Refusal, error_frame, failure_frame
 from zenagent.cli.rpc.ops_automations import AutomationsOps
 from zenagent.cli.rpc.ops_runs import RunsOps
 from zenagent.cli.rpc.ops_session import (
+    HostSessionOps,
     _optional_count,
     disk_transcript,
-    session_list_frame,
 )
 from zenagent.cli.rpc.slot import RuntimeSlot
 from zenagent.cli.rpc.terminal import TerminalError, TerminalSession, clamp_dim
@@ -51,7 +50,7 @@ SESSION_ADDRESSED_KINDS = frozenset(
 )
 
 
-class RpcHost(RunsOps, AutomationsOps):
+class RpcHost(HostSessionOps, RunsOps, AutomationsOps):
     """Reads requests, routes them to a project slot, and owns slot lifetime."""
 
     def __init__(
@@ -447,98 +446,6 @@ class RpcHost(RunsOps, AutomationsOps):
         slot = await self._spawn(target, resume=resume_path, base=base)
         self._activate(slot, background=background)
         return slot
-
-    async def _session_list(self, slot, request: dict, request_id) -> None:
-        """Answer the list with every resident slot's live session.
-
-        A transcript lands only when the turn ends, so a run streaming in a
-        sibling slot is in no file the slot's own listing reads: switch away
-        and the sidebar loses it. The host owns the slots; merge them here.
-        """
-        scope = "all" if request.get("scope") == "all" else "project"
-        archived = (
-            request.get("archived")
-            if request.get("archived") in ("exclude", "include", "only")
-            else "exclude"
-        )
-        live = [
-            other.runtime.session.path
-            for other in self._slots.values()
-            if other is not slot and (scope == "all" or other.root == slot.root)
-        ]
-        try:
-            frame = await session_list_frame(
-                slot.server.sessions, scope=scope, live=live, archived=archived
-            )
-        except Exception as exc:  # noqa: BLE001 - a bad listing is a result
-            self._send(
-                failure_frame(
-                    request_id,
-                    code="session_failed",
-                    message="session failed",
-                    exc=exc,
-                    op="list",
-                )
-            )
-            return
-        self._send({"type": "result", "id": request_id, "ok": True, **frame})
-
-    async def _session_archive(self, request: dict, request_id) -> None:
-        """Archive/restore a session straight on the sidecar — no slot needed.
-
-        A session nobody holds is exactly the settings-page case (its project
-        may not even be open). Only *archiving* a session a busy slot holds as
-        current is refused: the run owns that conversation. Restoring touches
-        nothing a run could own, so it is never refused.
-        """
-        try:
-            target = request.get("path")
-            if not isinstance(target, str) or not target.strip():
-                raise Refusal("archive needs path")
-            archived = request.get("archived")
-            if not isinstance(archived, bool):
-                raise Refusal("archive needs archived: true or false")
-            path = Path(target).expanduser()
-            holder = self._session_holder(str(path), self._project_tag(request))
-            if archived and holder is not None and holder.busy:
-                raise Refusal(
-                    "busy: cancel the run before archiving a session",
-                    code="session_busy",
-                )
-            from zenagent.agent.session import set_session_archived
-
-            stamp = await asyncio.to_thread(set_session_archived, path, archived)
-        except Refusal as exc:
-            self._send(
-                error_frame(
-                    request_id,
-                    str(exc),
-                    exc.code or "session_invalid",
-                    {"op": "archive"},
-                )
-            )
-            return
-        except Exception as exc:  # noqa: BLE001 - a bad session op is a result
-            self._send(
-                failure_frame(
-                    request_id,
-                    code="session_invalid",
-                    message="session archive failed",
-                    exc=exc,
-                    op="archive",
-                )
-            )
-            return
-        self._send(
-            {
-                "type": "result",
-                "id": request_id,
-                "ok": True,
-                "path": str(path),
-                "archived": archived,
-                "archived_at": stamp,
-            }
-        )
 
     async def _session_resume(self, request: dict, request_id) -> None:
         """Resume without ever aborting a run that belongs to another session.

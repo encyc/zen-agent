@@ -502,9 +502,7 @@ export function SidebarCoding() {
                 )}
               </>
             )}
-            {/* Archive is reversible, so it is one click — the two-step arm
-                is delete's alone. A row with no transcript yet (placeholder or
-                live) has nothing to put away; the op would refuse it. */}
+            {/* Reversible: one click, no arm. No transcript yet — nothing to put away. */}
             {(menuSession.messages > 0 || menuSession.path === currentPath) && (
               <button
                 type="button"
