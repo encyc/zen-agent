@@ -748,6 +748,94 @@ def test_set_session_pin_rejects_missing_file(tmp_path):
         set_session_pin(tmp_path / "nope.jsonl", True)
 
 
+def test_archive_sidecar_roundtrip_and_corruption(tmp_path):
+    from zenagent.agent.session import read_session_archived, set_session_archived
+
+    session = tmp_path / "s.jsonl"
+    session.touch()
+    assert read_session_archived(tmp_path) == {}
+
+    stamp = set_session_archived(session, True)
+    assert stamp > 0
+    assert read_session_archived(tmp_path) == {"s.jsonl": stamp}
+    assert set_session_archived(session, False) == 0.0
+    assert read_session_archived(tmp_path) == {}
+
+    (tmp_path / ".archive.json").write_text("{broken", encoding="utf-8")
+    assert read_session_archived(tmp_path) == {}
+    (tmp_path / ".archive.json").write_text('{"s.jsonl": 1}', encoding="utf-8")
+    assert read_session_archived(tmp_path) == {"s.jsonl": 1.0}
+
+
+def test_set_session_archived_rejects_missing_or_non_jsonl(tmp_path):
+    from zenagent.agent.session import set_session_archived
+
+    with pytest.raises(ValueError):
+        set_session_archived(tmp_path / "nope.jsonl", True)
+    (tmp_path / "notes.txt").touch()
+    with pytest.raises(ValueError):
+        set_session_archived(tmp_path / "notes.txt", True)
+
+
+def test_listing_filters_archived_by_mode(isolated_sessions):
+    from zenagent.agent.session import list_sessions, set_session_archived
+
+    isolated_sessions.mkdir(parents=True)
+    _write_session(isolated_sessions, "keep.jsonl", ["one"])
+    gone = _write_session(isolated_sessions, "gone.jsonl", ["two"])
+    set_session_archived(gone, True)
+
+    def names(mode):
+        return [info.path.name for info in list_sessions(archived=mode)]
+
+    assert "gone.jsonl" not in names("exclude")
+    assert set(names("include")) == {"keep.jsonl", "gone.jsonl"}
+    assert names("only") == ["gone.jsonl"]
+    only = list_sessions(archived="only")[0]
+    assert only.archived is True and only.archived_at > 0
+    with pytest.raises(ValueError):
+        list_sessions(archived="sometimes")
+
+
+def test_listing_hides_header_only_files_that_are_archived(isolated_sessions):
+    isolated_sessions.mkdir(parents=True)
+    # An archived session stops being "intentional": it is put away on
+    # purpose, so the pins/name keep-alives must not resurrect it in exclude.
+    from zenagent.agent.session import (
+        list_sessions,
+        set_session_archived,
+        set_session_pin,
+        set_session_title,
+    )
+
+    for name in ("named.jsonl", "pinned.jsonl"):
+        (isolated_sessions / name).write_text(
+            json.dumps({"type": "session", "version": 1, "createdAt": 1}) + "\n",
+            encoding="utf-8",
+        )
+        set_session_archived(isolated_sessions / name, True)
+    set_session_title(isolated_sessions / "named.jsonl", "Named")
+    set_session_pin(isolated_sessions / "pinned.jsonl", True)
+
+    names = {info.path.name for info in list_sessions()}
+    assert names == set()
+
+
+def test_latest_session_skips_archived(isolated_sessions):
+    isolated_sessions.mkdir(parents=True)
+    from zenagent.agent.session import latest_session, set_session_archived
+
+    old = isolated_sessions / "20260101-000000.jsonl"
+    new = isolated_sessions / "20260102-000000.jsonl"
+    for path in (old, new):
+        path.write_text(
+            json.dumps({"type": "session", "version": 1, "createdAt": 1}) + "\n",
+            encoding="utf-8",
+        )
+    set_session_archived(new, True)
+    assert latest_session() == old
+
+
 # ---------------------------------------------------------------------------
 # Side-channel records: session header, append_meta, tolerant loading
 # ---------------------------------------------------------------------------

@@ -19,7 +19,6 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-import tempfile
 import threading
 import time
 from collections.abc import Callable
@@ -30,6 +29,18 @@ from pathlib import Path
 from zenagent import __version__, project
 from zenagent.agent.blob_store import BlobStore, blob_root_for
 from zenagent.agent.jsonl import append_line, dump_line
+from zenagent.agent.session_sidecars import (
+    ARCHIVE_FILENAME,
+    PINS_FILENAME,
+    TITLE_LIMIT,
+    TITLES_FILENAME,
+    read_session_archived,
+    read_session_pins,
+    read_session_titles,
+    set_session_archived,
+    set_session_pin,
+    set_session_title,
+)
 from zenagent.i18n import t
 from zenagent.types import (
     AssistantMessage,
@@ -40,6 +51,10 @@ from zenagent.types import (
 )
 
 __all__ = [
+    "ARCHIVE_FILENAME",
+    "PINS_FILENAME",
+    "TITLES_FILENAME",
+    "TITLE_LIMIT",
     "Session",
     "SessionInfo",
     "all_session_dirs",
@@ -47,33 +62,28 @@ __all__ = [
     "goal_objective",
     "latest_session",
     "list_sessions",
+    "read_session_archived",
     "read_session_pins",
     "read_session_titles",
     "session_path",
     "session_title",
     "sessions_dir",
+    "set_session_archived",
     "set_session_pin",
     "set_session_title",
     "truncate_last_turn",
     "unique_session_path",
 ]
 
-#: Display names live in a sidecar keyed by session filename: the JSONL stays
-#: append-only ``Message.to_json()`` and can still be replayed by other tools.
-TITLES_FILENAME = ".titles.json"
-
-#: Pinned sessions live in a sibling sidecar (a JSON array of filenames), for
-#: the same reason: the transcript format never changes for UI metadata.
-PINS_FILENAME = ".pins.json"
-
-#: Stored display names are capped after whitespace normalization.
-TITLE_LIMIT = 80
-
 #: Characters that commonly start a Markdown line and carry no title meaning.
 _MARKDOWN_PREFIX_CHARS = "#>-*+`"
 
 #: The two listing scopes: the current project, or every project plus legacy.
 _SCOPES = ("project", "all")
+
+#: How :func:`list_sessions` treats the archive sidecar: hide archived
+#: sessions, show everything, or show only the archived ones.
+_ARCHIVE_MODES = ("exclude", "include", "only")
 
 #: Schema version of the side-channel record envelope (the ``session`` header's
 #: ``version`` field); message lines are untouched by it.
@@ -188,128 +198,6 @@ def _project_label(directory: Path) -> str:
     return name if isinstance(name, str) and name else key
 
 
-def read_session_titles(directory: Path | None = None) -> dict[str, str]:
-    """Stored display names by session filename, for one sessions directory.
-
-    ``directory`` defaults to the current project's sessions directory: each
-    directory owns its own sidecar, so names cannot leak between projects. A
-    missing, unreadable, corrupt, or non-dict sidecar yields ``{}``: naming is
-    a convenience, so it must never be able to break session listing or resume.
-    """
-    base = sessions_dir() if directory is None else Path(directory)
-    try:
-        data = json.loads(_titles_path(base).read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return {}
-    if not isinstance(data, dict):
-        return {}
-    return {
-        name: title
-        for name, title in data.items()
-        if isinstance(name, str) and isinstance(title, str) and title
-    }
-
-
-def _normalize_title(title: str) -> str:
-    return " ".join(title.split())[:TITLE_LIMIT]
-
-
-def _write_session_titles(directory: Path, titles: dict[str, str]) -> None:
-    """Replace one directory's sidecar atomically: readers never see a half file."""
-    sidecar = _titles_path(directory)
-    sidecar.parent.mkdir(parents=True, exist_ok=True)
-    descriptor, temp_name = tempfile.mkstemp(
-        dir=sidecar.parent, prefix=f"{sidecar.name}.", suffix=".tmp"
-    )
-    try:
-        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
-            json.dump(titles, handle, ensure_ascii=False, indent=2, sort_keys=True)
-            handle.write("\n")
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(temp_name, sidecar)
-    except BaseException:
-        Path(temp_name).unlink(missing_ok=True)
-        raise
-
-
-def set_session_title(path: Path, title: str) -> str:
-    """Persist ``title`` as the display name of the session file at ``path``.
-
-    The sidecar is the one next to the session file (each sessions directory,
-    and therefore each project, has its own). The title is whitespace-flattened
-    and capped at :data:`TITLE_LIMIT`; a blank title is a caller error (there
-    would be nothing to display), so it raises ``ValueError`` and leaves the
-    sidecar untouched. The transcript is not read or modified.
-    """
-    session_file = Path(path)
-    normalized = _normalize_title(title)
-    if not normalized:
-        raise ValueError("session title must not be empty")
-    titles = read_session_titles(session_file.parent)
-    titles[session_file.name] = normalized
-    _write_session_titles(session_file.parent, titles)
-    return normalized
-
-
-def _pins_path(directory: Path) -> Path:
-    return Path(directory) / PINS_FILENAME
-
-
-def read_session_pins(directory: Path | None = None) -> set[str]:
-    """Pinned session filenames for one sessions directory.
-
-    Like the titles sidecar, a missing/corrupt/non-list file is an empty set:
-    pinning is a convenience and must never break session listing.
-    """
-    base = sessions_dir() if directory is None else Path(directory)
-    try:
-        data = json.loads(_pins_path(base).read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return set()
-    if not isinstance(data, list):
-        return set()
-    return {name for name in data if isinstance(name, str) and name}
-
-
-def _write_session_pins(directory: Path, pins: set[str]) -> None:
-    """Replace one directory's pins sidecar atomically."""
-    sidecar = _pins_path(directory)
-    sidecar.parent.mkdir(parents=True, exist_ok=True)
-    descriptor, temp_name = tempfile.mkstemp(
-        dir=sidecar.parent, prefix=f"{sidecar.name}.", suffix=".tmp"
-    )
-    try:
-        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
-            json.dump(sorted(pins), handle, ensure_ascii=False, indent=2)
-            handle.write("\n")
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(temp_name, sidecar)
-    except BaseException:
-        Path(temp_name).unlink(missing_ok=True)
-        raise
-
-
-def set_session_pin(session_file: Path, pinned: bool) -> bool:
-    """Pin or unpin one saved session; returns the resulting state.
-
-    Raises ``ValueError`` for anything that is not a saved ``*.jsonl`` session
-    (pinning a nonexistent file would silently pollute the sidecar). The
-    transcript is never read or modified.
-    """
-    target = Path(session_file)
-    if target.suffix != ".jsonl" or not target.is_file():
-        raise ValueError(f"not a saved session file: {target}")
-    pins = read_session_pins(target.parent)
-    if pinned:
-        pins.add(target.name)
-    else:
-        pins.discard(target.name)
-    _write_session_pins(target.parent, pins)
-    return pinned
-
-
 def goal_objective(text: str) -> str:
     """The ``<objective>`` body of a goal turn; ``""`` when there is none."""
     start = text.find("<objective>")
@@ -410,6 +298,11 @@ class SessionInfo:
     #: True when the file holds more than its envelope (the header): a run
     #: in progress, a goal, or a stored conversation.
     started: bool = False
+    #: True when the archive sidecar puts this session away; filled by
+    #: :func:`list_sessions` (the index cache does not know the sidecar).
+    archived: bool = False
+    #: When the session was archived (epoch seconds); 0.0 when it was not.
+    archived_at: float = 0.0
 
 
 @dataclass
@@ -828,6 +721,7 @@ def list_sessions(
     scope: str = "project",
     root: Path | str | None = None,
     cache: bool = True,
+    archived: str = "exclude",
 ) -> list[SessionInfo]:
     """Saved sessions, newest first, skipping files that cannot be read.
 
@@ -844,9 +738,17 @@ def list_sessions(
     disk); each directory's title sidecar is read once and shared.
     ``limit=None`` returns every session: a sidebar that pages a project ten
     rows at a time must not lose the tail to a cap it never asked for.
+    ``archived`` filters by the archive sidecar: ``"exclude"`` (the default)
+    keeps the historical listing, ``"include"`` returns both, ``"only"`` the
+    archived ones -- each entry carries ``archived``/``archived_at`` so a
+    caller can label what it shows.
     """
     if scope not in _SCOPES:
         raise ValueError(f"unknown session scope: {scope!r} (choose project|all)")
+    if archived not in _ARCHIVE_MODES:
+        raise ValueError(
+            f"unknown archived mode: {archived!r} (choose exclude|include|only)"
+        )
     directories = (
         [sessions_dir(root=root)] if scope == "project" else all_session_dirs()
     )
@@ -859,9 +761,18 @@ def list_sessions(
             continue
         titles = read_session_titles(directory)
         pins = read_session_pins(directory)
+        archived_stamps = read_session_archived(directory)
         label = _project_label(directory)
         index = SessionIndex(directory, cache=cache)
         for path in directory.glob("*.jsonl"):
+            # Archive wins over every keep-alive: an archived session is put
+            # away on purpose, so it is filtered before the intentional-empty
+            # logic below can resurrect it via a name or a pin.
+            is_archived = path.name in archived_stamps
+            if archived == "exclude" and is_archived:
+                continue
+            if archived == "only" and not is_archived:
+                continue
             try:
                 info = index.read(path, titles)
             except (ValueError, OSError):
@@ -879,6 +790,8 @@ def list_sessions(
             ):
                 continue
             info.project = label
+            info.archived = is_archived
+            info.archived_at = archived_stamps.get(path.name, 0.0)
             infos.append(info)
         index.flush()
     infos.sort(key=lambda info: info.mtime, reverse=True)
@@ -893,7 +806,9 @@ def latest_session(
     ``scope="project"`` keeps the historical name ordering (session filenames
     sort chronologically) inside the current project's directory.
     ``scope="all"`` looks across every known project and the legacy directory
-    and returns the newest by modification time.
+    and returns the newest by modification time. Archived sessions are
+    skipped: ``--resume latest`` must not silently jump into a conversation
+    someone put away.
     """
     if scope not in _SCOPES:
         raise ValueError(f"unknown session scope: {scope!r} (choose project|all)")
@@ -901,13 +816,17 @@ def latest_session(
         directory = sessions_dir(root=root)
         if not directory.is_dir():
             return None
-        files = sorted(directory.glob("*.jsonl"))
+        archived = read_session_archived(directory)
+        files = sorted(
+            path for path in directory.glob("*.jsonl") if path.name not in archived
+        )
         return files[-1] if files else None
     candidates = [
         path
         for directory in all_session_dirs()
         if directory.is_dir()
         for path in directory.glob("*.jsonl")
+        if path.name not in read_session_archived(directory)
     ]
     if not candidates:
         return None

@@ -544,3 +544,56 @@ async def test_an_old_zen_session_lists_as_a_normal_coding_session(session_runti
     entry = next(entry for entry in manager.entries() if entry.path == path)
     assert not hasattr(entry, "workspace")
     assert entry.messages == 2
+
+
+async def test_entries_exclude_archived_and_set_archived_roundtrips(session_runtime):
+    runtime = session_runtime
+    manager = SessionManager(runtime)
+    first = manager.current()
+    await runtime.agent.prompt("first")
+    await manager.new()
+    second = manager.current()
+    await runtime.agent.prompt("second")
+
+    # Archive the *non-current* session: archiving the on-screen one is the
+    # client's two-step (switch to new first), the listing alone cannot.
+    stamp = manager.set_archived(first, True)
+    assert stamp > 0
+
+    names = [entry.path.name for entry in manager.entries()]
+    assert first.name not in names
+    assert second.name in names
+
+    only = manager.entries(archived="only")
+    assert [entry.path.name for entry in only] == [first.name]
+    assert only[0].archived is True and only[0].archived_at == stamp
+    wire = only[0].as_wire()
+    assert wire["archived"] is True and wire["archived_at"] == stamp
+
+    manager.set_archived(first, False)
+    assert manager.set_archived(first, True) > 0  # re-archive is idempotent state
+    assert first.name not in [entry.path.name for entry in manager.entries()]
+
+
+async def test_archived_pinned_session_stays_hidden_until_restored(session_runtime):
+    runtime = session_runtime
+    manager = SessionManager(runtime)
+    first = manager.current()
+    await runtime.agent.prompt("first")
+    manager.toggle_pin(first)
+    await manager.new()
+
+    manager.set_archived(first, True)
+    assert first.name not in [entry.path.name for entry in manager.entries()]
+
+    manager.set_archived(first, False)
+    restored = next(entry for entry in manager.entries() if entry.path == first)
+    assert restored.pinned is True
+
+
+async def test_set_archived_refuses_an_unsaved_session(session_runtime):
+    manager = SessionManager(session_runtime)
+    lazy = manager.current()
+    assert not lazy.exists()
+    with pytest.raises(ValueError):
+        manager.set_archived(lazy, True)

@@ -7,7 +7,13 @@ import { useEffect, useMemo, useState } from 'react'
 import clsx from 'clsx'
 import { lastProjectCwd, useAppStore } from '../../state/appStore'
 import { projectRows } from '../../state/projectRows'
-import { useProjectStore, useSessionStore, useSettingsStore } from '../../state/stores'
+import {
+  useArchivedStore,
+  useProjectStore,
+  useSessionStore,
+  useSettingsStore,
+} from '../../state/stores'
+import type { SessionSummary } from '../../rpc/types'
 import { useT } from '../../i18n/locale'
 import { frameErrorNotice } from '../../rpc/frames'
 import { formatAge } from '../format'
@@ -22,9 +28,11 @@ interface ProjectRowProps {
   registered: boolean
   stat: { sessions: number; last: number }
   active: boolean
+  /** This project's archived sessions, from the `archived: 'only'` listing. */
+  archived: SessionSummary[]
 }
 
-function ProjectRow({ path, root, name, registered, stat, active }: ProjectRowProps) {
+function ProjectRow({ path, root, name, registered, stat, active, archived }: ProjectRowProps) {
   const t = useT()
   const locale = useSettingsStore((state) => state.locale)
   const removeProject = useProjectStore((state) => state.removeProject)
@@ -32,7 +40,9 @@ function ProjectRow({ path, root, name, registered, stat, active }: ProjectRowPr
   const openProject = useAppStore((state) => state.openProject)
   const relocateProject = useAppStore((state) => state.relocateProject)
   const newSession = useAppStore((state) => state.newSession)
+  const archiveSession = useAppStore((state) => state.archiveSession)
   const setView = useSettingsStore((state) => state.setView)
+  const [archivesOpen, setArchivesOpen] = useState(false)
   const [armed, setArmed] = useState(false)
   const [target, setTarget] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -147,6 +157,49 @@ function ProjectRow({ path, root, name, registered, stat, active }: ProjectRowPr
           </button>
         ) : null}
       </div>
+      {archived.length > 0 ? (
+        <div className={css.archives}>
+          <button
+            type="button"
+            className={css.archiveToggle}
+            data-archived-toggle
+            onClick={() => setArchivesOpen((open) => !open)}
+          >
+            {archivesOpen ? '▾' : '▸'} {t('settings.projectArchived', { count: archived.length })}
+          </button>
+          {archivesOpen ? (
+            archived.length === 0 ? (
+              <div className={css.archiveWhen}>{t('settings.projectArchivedEmpty')}</div>
+            ) : (
+              <div className={css.archiveList} data-archived-list>
+                {archived.map((session) => (
+                  <div
+                    key={session.path}
+                    className={css.archiveRow}
+                    data-archived-path={session.path}
+                  >
+                    <span className={css.archiveTitle}>
+                      {session.title || session.name}
+                    </span>
+                    <span className={css.archiveWhen}>
+                      {t('settings.projectArchivedAt', {
+                        when: formatAge(session.archived_at, locale),
+                      })}
+                    </span>
+                    <button
+                      type="button"
+                      className={css.action}
+                      onClick={() => void archiveSession(session.path, false)}
+                    >
+                      {t('session.restore')}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )
+          ) : null}
+        </div>
+      ) : null}
       {active ? <div className={css.hint}>{t('settings.projectRelocateActive')}</div> : null}
       {target !== null ? (
         <div className={css.confirm} data-project-confirm>
@@ -181,14 +234,20 @@ export function ProjectSettings() {
   const projects = useProjectStore((state) => state.projects)
   const addProject = useProjectStore((state) => state.addProject)
   const sessions = useSessionStore((state) => state.sessions)
+  const archived = useArchivedStore((state) => state.archived)
   const refreshSessions = useAppStore((state) => state.refreshSessions)
+  const refreshArchivedSessions = useAppStore((state) => state.refreshArchivedSessions)
   const current = useAppStore(() => lastProjectCwd())
 
   useEffect(() => {
     void refreshSessions()
-  }, [refreshSessions])
+    void refreshArchivedSessions()
+  }, [refreshSessions, refreshArchivedSessions])
 
-  const rows = useMemo(() => projectRows(sessions, projects), [sessions, projects])
+  const rows = useMemo(
+    () => projectRows(sessions, projects, archived),
+    [sessions, projects, archived],
+  )
 
   const add = async () => {
     const path = await pickProjectFolder()
@@ -222,6 +281,11 @@ export function ProjectSettings() {
                 registered={row.registered}
                 stat={row.stat}
                 active={current === row.path || current === row.root}
+                archived={archived.filter(
+                  (session) =>
+                    (session.project_path ?? '') === row.root ||
+                    (session.project_path ?? '').startsWith(`${row.root}/`),
+                )}
               />
             ))
           )}

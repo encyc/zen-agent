@@ -154,6 +154,8 @@ SHAPES: dict[str, dict] = dict(
             "messages": Field(INT),
             "current": Field(BOOL),
             "pinned": Field(BOOL),
+            "archived": Field(BOOL),
+            "archived_at": Field(FLOAT),
             "created_at": Field(FLOAT),
             "updated_at": Field(FLOAT),
             "model": Field(STRING),

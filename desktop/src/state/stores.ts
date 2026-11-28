@@ -59,6 +59,19 @@ export const useSessionStore = create<SessionState>((set) => ({
     }),
 }))
 
+// ---- archived sessions ------------------------------------------------------
+
+interface ArchivedState {
+  /** Rows from the `archived: 'only'` listing: what the settings page shows. */
+  archived: SessionSummary[]
+  setArchived(archived: SessionSummary[]): void
+}
+
+export const useArchivedStore = create<ArchivedState>((set) => ({
+  archived: [],
+  setArchived: (archived) => set({ archived }),
+}))
+
 // ---- projects ---------------------------------------------------------------
 
 export interface ProjectEntry {

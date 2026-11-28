@@ -1,5 +1,6 @@
 """Project-scoped frontends: labels, scope toggles, CLI, warnings, discovery."""
 
+import json
 from pathlib import Path
 
 from zenagent import project
@@ -167,3 +168,50 @@ def test_usage_scans_every_project(tmp_path, monkeypatch):
     paths = session_paths()
     assert project.project_sessions_dir(root=here) / "20260101-000000.jsonl" in paths
     assert project.project_sessions_dir(root=other) / "20260101-000000.jsonl" in paths
+
+
+def test_sessions_list_archived_flag_filters_to_archived_only(monkeypatch, capsys):
+    import zenagent.agent.session as session_module
+    from zenagent.cli import sessionscmd
+
+    info = SessionInfo(
+        path=Path("/tmp/gone.jsonl"),
+        mtime=1.0,
+        messages=2,
+        title="old work",
+        project="app",
+        archived=True,
+        archived_at=1_700_000_000.0,
+    )
+    captured: dict = {}
+
+    def fake_list(**kwargs):
+        captured.update(kwargs)
+        return [info]
+
+    monkeypatch.setattr(session_module, "list_sessions", fake_list)
+
+    assert sessionscmd.main(["list", "--archived"]) == 0
+    assert captured.get("archived") == "only"
+    out = capsys.readouterr().out
+    assert "old work" in out
+
+    assert sessionscmd.main(["list", "--archived", "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload[0]["archived"] is True
+    assert payload[0]["archived_at"] == 1_700_000_000.0
+
+
+def test_sessions_list_defaults_to_excluding_archived(monkeypatch, capsys):
+    import zenagent.agent.session as session_module
+    from zenagent.cli import sessionscmd
+
+    captured: dict = {}
+
+    def fake_list(**kwargs):
+        captured.update(kwargs)
+        return []
+
+    monkeypatch.setattr(session_module, "list_sessions", fake_list)
+    assert sessionscmd.main(["list"]) == 0
+    assert captured.get("archived", "exclude") == "exclude"

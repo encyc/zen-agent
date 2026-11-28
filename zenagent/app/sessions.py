@@ -21,6 +21,7 @@ from zenagent.agent.session import (
     list_sessions,
     read_session_pins,
     read_session_titles,
+    set_session_archived,
     set_session_pin,
     set_session_title,
     truncate_last_turn,
@@ -116,6 +117,8 @@ class SessionEntry:
     project: str = ""
     project_path: str = ""
     pinned: bool = False
+    archived: bool = False
+    archived_at: float = 0.0
 
     def as_wire(self) -> dict:
         """The JSON shape ``session list`` answers with (paths as strings)."""
@@ -128,6 +131,8 @@ class SessionEntry:
             "messages": self.messages,
             "current": self.current,
             "pinned": self.pinned,
+            "archived": self.archived,
+            "archived_at": self.archived_at,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
             "model": self.model,
@@ -168,6 +173,7 @@ class SessionManager:
         scope: str = "project",
         limit: int | None = None,
         live: Iterable[Path] = (),
+        archived: str = "exclude",
     ) -> list[SessionEntry]:
         """Rows for the session list, newest first with pinned rows on top.
 
@@ -176,12 +182,16 @@ class SessionManager:
         global cap only loses the tail. ``live`` names sessions other runtimes
         hold right now — a run streaming in a sibling slot has no transcript
         yet — so they keep a row instead of vanishing from the list.
+        ``archived`` filters by the archive sidecar (``list_sessions``):
+        ``"exclude"`` is the sidebar view, ``"only"`` the settings view. The
+        placeholder and live-row bookkeeping only makes sense for the active
+        listing, so it runs for ``"exclude"`` alone.
         """
         current = self.current()
         entries: list[SessionEntry] = []
         pins_by_dir: dict[Path, set[str]] = {}
         roots_by_dir: dict[Path, str] = {}
-        for info in list_sessions(limit=limit, scope=scope):
+        for info in list_sessions(limit=limit, scope=scope, archived=archived):
             try:
                 size = info.path.stat().st_size
             except OSError:
@@ -206,8 +216,15 @@ class SessionManager:
                     project=info.project,
                     project_path=roots_by_dir[directory],
                     pinned=info.path.name in pins_by_dir[directory],
+                    archived=info.archived,
+                    archived_at=info.archived_at,
                 )
             )
+        if archived != "exclude":
+            # A pure listing (the settings view): no placeholder for the
+            # unsaved current session, no live rows — those describe the
+            # active conversation, which an archived listing does not show.
+            return entries
         # Pinned first, otherwise newest-first exactly as list_sessions returned
         # (sorted() is stable, so no time order is lost inside each group).
         entries.sort(key=lambda entry: not entry.pinned)
@@ -295,6 +312,17 @@ class SessionManager:
             raise ValueError(t("session.not_found", target=target))
         currently = target.name in read_session_pins(target.parent)
         return set_session_pin(target, not currently)
+
+    def set_archived(self, path: Path, archived: bool) -> float:
+        """Archive/restore one saved session; returns its archived-at stamp.
+
+        Delegates to the kernel sidecar, whose validation is the contract:
+        a lazy (unsaved) session or a legacy-directory file is refused. The
+        transcript is never touched, so a session open in another slot keeps
+        working; no materialize — archiving an unsaved conversation is a
+        caller error, not an intent to keep it.
+        """
+        return set_session_archived(Path(path), archived)
 
     async def resume(self, path: Path) -> None:
         await self.runtime.switch_session(path)

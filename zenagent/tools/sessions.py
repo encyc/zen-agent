@@ -200,9 +200,10 @@ def _row(info: SessionInfo, every_project: bool) -> str:
     day = datetime.fromtimestamp(info.mtime).strftime("%Y-%m-%d")
     project = f"[{info.project}] " if every_project and info.project else ""
     source = f"  (fork of {info.derived_from})" if info.derived_from else ""
+    archived = " (archived)" if info.archived else ""
     return (
         f"{info.path.stem}  {info.messages} msgs  {day}  "
-        f"{project}{info.title}{source}"
+        f"{project}{info.title}{source}{archived}"
     )
 
 
@@ -228,6 +229,7 @@ async def _list_sessions(
         scope="all" if every_project else "project",
         root=root,
         cache=False,  # read-only tool: never write _index.json
+        archived="include",  # archived sessions stay findable for the model
     )
     scope = "all" if every_project else "project"
     if not infos:
@@ -300,10 +302,11 @@ def _header(hits: _SessionHits, every_project: bool) -> str:
     day = datetime.fromtimestamp(info.mtime).strftime("%Y-%m-%d")
     fork = f", fork of {info.derived_from}" if info.derived_from else ""
     project = f"  [{info.project}]" if every_project and info.project else ""
+    archived = " (archived)" if info.archived else ""
     hit_word = "hit" if hits.hits == 1 else "hits"
     return (
         f"{info.path.stem}  {hits.hits} {hit_word}  "
-        f"({day}, {info.messages} msgs{fork}){project}"
+        f"({day}, {info.messages} msgs{fork}){project}{archived}"
     )
 
 
@@ -404,6 +407,7 @@ async def _search_sessions(
         scope="all" if every_project else "project",
         root=root,
         cache=False,  # read-only tool: never write _index.json
+        archived="include",  # archived sessions stay searchable
     )
     if not infos:
         return text_result(
@@ -518,6 +522,7 @@ def _resolve_session(
         scope="all",
         root=root,
         cache=False,  # read-only tool: never write _index.json
+        archived="include",  # a search may point at an archived session
     )
     matches = [info for info in infos if info.path.stem == wanted]
     if len(matches) == 1:

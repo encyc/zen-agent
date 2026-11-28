@@ -515,3 +515,37 @@ async def test_a_forked_session_shows_its_source(tmp_path):
     # Both files match: the same text in the source and its fork.
     assert found.details["sessions"] == 2
     assert "fork of 20260101-000000" in found.content[0].text
+
+
+async def test_tools_keep_archived_sessions_visible_and_marked(tmp_path):
+    """Archive hides a session from the sidebar, not from the model: the
+    three tools still list, search and read it, with an explicit marker."""
+    from zenagent.agent.session import set_session_archived
+
+    root = tmp_path / "alpha"
+    root.mkdir()
+    write_session(root, "20260101-000000", [
+        {"role": "user", "content": "kept conversation text", "timestamp": 1},
+    ])
+    write_session(root, "20260101-010000", [
+        {"role": "user", "content": "archived conversation text", "timestamp": 1},
+    ])
+    set_session_archived(
+        project.project_sessions_dir(root=root) / "20260101-010000.jsonl", True
+    )
+    tools = build_session_tools(root)
+
+    listed = await call(tools, "list_sessions")
+    text = listed.content[0].text
+    row = next(line for line in text.splitlines() if "20260101-010000" in line)
+    assert row.endswith(" (archived)"), row
+    kept_row = next(line for line in text.splitlines() if "20260101-000000" in line)
+    assert not kept_row.endswith(" (archived)")
+
+    found = await call(tools, "search_sessions", query="archived conversation")
+    assert found.details["sessions"] == 1
+    assert "20260101-010000" in found.content[0].text
+    assert " (archived)" in found.content[0].text
+
+    read = await call(tools, "read_session", id="20260101-010000")
+    assert "archived conversation text" in read.content[0].text
