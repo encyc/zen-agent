@@ -106,6 +106,26 @@ async def test_read_directory_is_an_error_result():
     assert "directory" in result.content[0].text
 
 
+@pytest.mark.parametrize(
+    "payload, mime",
+    [
+        (b"\x89PNG\r\n\x1a\n" + b"\x00" * 16, "image/png"),
+        # a JPEG header with and without NUL bytes: both old refusal paths must redirect
+        (b"\xff\xd8\xff\xe0\x00\x10JFIF\x00" + b"\x00" * 8, "image/jpeg"),
+        (b"\xff\xd8\xff" + b"\xff" * 16, "image/jpeg"),
+    ],
+)
+async def test_read_file_points_images_at_read_image(payload, mime):
+    from pathlib import Path
+
+    Path("shot.dat").write_bytes(payload)
+    result = await call(READ_FILE, path="shot.dat")
+    assert result.is_error
+    assert result.content[0].text == (
+        f"refusing to read shot.dat: it is an image ({mime}); call read_image to view it"
+    )
+
+
 async def test_read_binary_file_is_refused():
     from pathlib import Path
 

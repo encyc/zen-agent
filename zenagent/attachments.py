@@ -12,7 +12,7 @@ from pathlib import Path
 
 from zenagent.types import ImageContent
 
-__all__ = ["MAX_IMAGE_BYTES", "read_image_argument"]
+__all__ = ["MAX_IMAGE_BYTES", "read_image_argument", "sniff_image_mime"]
 
 #: Largest attachment accepted (per image).
 MAX_IMAGE_BYTES = 5 * 1024 * 1024
@@ -27,7 +27,8 @@ _MAGIC: tuple[tuple[bytes, str], ...] = (
 )
 
 
-def _sniff_mime(data: bytes) -> str | None:
+def sniff_image_mime(data: bytes) -> str | None:
+    """The MIME type of an image payload, by magic bytes; ``None`` if not one."""
     for prefix, mime in _MAGIC:
         if data.startswith(prefix):
             if prefix == b"RIFF" and data[8:12] != b"WEBP":
@@ -55,7 +56,7 @@ def read_image_argument(path: Path, max_bytes: int = MAX_IMAGE_BYTES) -> ImageCo
         )
 
     data = target.read_bytes()
-    mime = _sniff_mime(data)
+    mime = sniff_image_mime(data)
     if mime is None:
         raise ValueError(f"{target} does not look like a png/jpeg/gif/webp image")
     return ImageContent(data=base64.b64encode(data).decode("ascii"), mime_type=mime)

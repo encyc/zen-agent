@@ -1,5 +1,5 @@
 Tool policy:
-- Specialized: must use read_file, list_dir, glob, grep, web_search and fetch instead of shell equivalents.
+- Specialized: must use read_file, read_image, list_dir, glob, grep, web_search and fetch instead of shell equivalents.
 - General: use bash only when no specialized tool fits.
 - Exploration: never guess file contents; read or grep the code before changing it.
 - History: when the user mentions an earlier session, call search_sessions before guessing a path; escalate include only on a miss.

@@ -45,3 +45,11 @@ def test_rejects_missing_files(tmp_path):
 
 def test_default_limit_is_five_megabytes():
     assert MAX_IMAGE_BYTES == 5 * 1024 * 1024
+
+
+def test_sniff_image_mime_is_public_and_ignores_the_extension():
+    from zenagent.attachments import sniff_image_mime
+
+    assert sniff_image_mime(PNG) == "image/png"
+    assert sniff_image_mime(b"RIFF\x00\x00\x00\x00WAVEjunk") is None  # RIFF, but not WEBP
+    assert sniff_image_mime(b"definitely not an image") is None

@@ -21,6 +21,7 @@ from pathlib import Path
 
 from zenagent.agent.loop import AgentTool, ToolResultAgent
 from zenagent.agent.result_budget import LINE_TRUNCATION_MARKER
+from zenagent.attachments import sniff_image_mime
 from zenagent.prompts import tool_description
 from zenagent.tools import read_state
 from zenagent.tools._result import text_result
@@ -178,6 +179,13 @@ async def _read_file(
     except OSError as exc:
         return text_result(f"cannot read {path}: {exc}", is_error=True)
 
+    mime = sniff_image_mime(data)
+    if mime is not None:
+        return text_result(
+            f"refusing to read {path}: it is an image ({mime}); "
+            "call read_image to view it",
+            is_error=True,
+        )
     if _looks_binary(data):
         return text_result(
             f"refusing to read {path}: it looks binary "

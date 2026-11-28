@@ -17,6 +17,11 @@ P0 extracted the v0.4.1 text verbatim — no behavior change.
   tool's schema is 134 bytes.
 - `system.environment` renders the tool roster, so the twelfth builtin grows it
   past its ceiling: budget 240 → 244 (spec comment records the rule).
+- `tool.read_file` gains one sentence (images are refused; view them with
+  `read_image`); `plan_mode` and `system.tool_policy` name `read_image` among the
+  read-only / specialized tools. Why: on 2026-11-18 and 2026-11-28 the model's own
+  habit was to `read_file` a screenshot it had just captured and then fall back to
+  measuring pixels; naming the tool where that habit lands is what makes it found.
 
 ## 2026-11-28.1 — Computer Use enters the roster
 
