@@ -23,7 +23,7 @@
   display: flex;
   align-items: center;
   gap: 7px;
-  padding: 12px 18px 0;
+  padding: 8px 8px 0 12px;
 }
 
 .stripIcon {
@@ -77,13 +77,73 @@
     color-mix(in oklab, var(--dsw-alias-state-business-primary) 30%, transparent);
 }
 
+/* The fold: one status row when closed. Same disclosure technique as the todo
+ * dock (grid rows 0fr→1fr) so both surfaces open at the same beat. */
+.clip {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows var(--ds-transition-duration) var(--ds-ease-in-out);
+}
+
+.card[data-collapsed] .clip {
+  grid-template-rows: 0fr;
+  visibility: hidden;
+  transition:
+    grid-template-rows var(--ds-transition-duration) var(--ds-ease-in-out),
+    visibility 0s var(--ds-transition-duration);
+}
+
+.clipInner {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.fold {
+  display: grid;
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  margin-left: auto;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--ds-radius-8);
+  background: none;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+  transition:
+    background-color var(--ds-motion-fast) var(--ds-ease-out),
+    color var(--ds-motion-fast) var(--ds-ease-out);
+}
+
+.fold:hover {
+  background: var(--ds-surface-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.fold:focus-visible {
+  outline: 2px solid var(--ds-accent);
+  outline-offset: -2px;
+}
+
+/* Closed points up, open points down — the todo dock's direction, so the two
+ * disclosures read the same way. */
+.fold svg {
+  transform: rotate(180deg);
+  transition: transform var(--ds-transition-duration) var(--ds-ease-in-out);
+}
+
+.fold[aria-expanded='true'] svg {
+  transform: rotate(0deg);
+}
+
 /* ---- question ---------------------------------------------------------------- */
 
 .body {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 12px 18px 16px;
+  gap: 9px;
+  padding: 8px 12px 12px;
 }
 
 .questionBlock {
@@ -103,16 +163,16 @@
 .question {
   display: block;
   margin: 0;
-  font-size: var(--ds-font-16);
+  font-size: var(--ds-font-14);
   font-weight: 550;
-  line-height: 22px;
+  line-height: 20px;
   color: var(--dsw-alias-label-primary);
 }
 
 .questionBody {
   display: block;
   min-width: 0;
-  max-height: min(208px, 24vh);
+  max-height: min(160px, 20vh);
   overflow-y: auto;
   overflow-wrap: anywhere;
 }
@@ -126,10 +186,10 @@
 
 .options {
   display: grid;
-  gap: 7px;
+  gap: 5px;
   /* Generous enough that a typical option set never scrolls; the cap only
    * exists so a runaway list cannot swallow the transcript. */
-  max-height: min(340px, 46vh);
+  max-height: min(200px, 30vh);
   padding-right: 4px;
   overflow-y: auto;
 }
@@ -139,14 +199,14 @@
   width: 100%;
   align-items: flex-start;
   gap: 10px;
-  padding: 9px 12px;
+  padding: 7px 10px;
   border: 0;
   border-radius: 10px;
   background: var(--ds-surface-1);
   color: var(--dsw-alias-label-secondary);
   font: inherit;
   font-size: var(--ds-font-13);
-  line-height: 20px;
+  line-height: 18px;
   text-align: start;
   cursor: pointer;
   transition: background-color var(--ds-motion-fast) var(--ds-ease-out), box-shadow var(--ds-motion-fast) var(--ds-ease-out);
@@ -274,7 +334,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 18px 14px;
+  padding: 8px 12px 10px;
   border-top: 1px solid var(--ds-hairline);
 }
 

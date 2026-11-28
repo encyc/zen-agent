@@ -211,6 +211,44 @@ test('the ask card collects answers and resolves the blocked tool call', async (
     [null],
   )
 })
+test('the ask card folds to one status row and unfolds again', async ({ page }) => {
+  await boot(page, initialState())
+  await emitEvent(page, {
+    type: 'ask_request',
+    request_id: 'q-fold',
+    questions: [
+      {
+        id: 'db',
+        question: '用哪个数据库？',
+        header: '数据库',
+        options: [{ label: 'SQLite' }, { label: 'Postgres' }],
+        multi: false,
+      },
+    ],
+  })
+  const card = page.getByTestId('ask-card')
+  await expect(card).toBeVisible()
+  await expect(card).toContainText('用哪个数据库？')
+
+  const collapsedHeight = await card.boundingBox().then((box) => box?.height ?? 0)
+  const toggle = page.getByRole('button', { name: '折叠提问' })
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true')
+  await toggle.click()
+
+  await expect(page.getByRole('button', { name: '展开提问' })).toHaveAttribute(
+    'aria-expanded',
+    'false',
+  )
+  await expect(card).toContainText('需要你的选择')
+  // The body is still mounted (that is what makes the fold animate), so the
+  // claim under test is visibility, not absence from the DOM.
+  await expect(card.getByText('用哪个数据库？').first()).toBeHidden()
+  const foldedHeight = await card.boundingBox().then((box) => box?.height ?? 0)
+  assert.ok(foldedHeight > 0 && foldedHeight < collapsedHeight)
+
+  await page.getByRole('button', { name: '展开提问' }).click()
+  await expect(card.getByText('用哪个数据库？').first()).toBeVisible()
+})
 test('composer menus open directly above their own trigger', async ({ page }) => {
   await boot(page, initialState())
   const mode = page.locator('[data-menu-trigger="mode"]')

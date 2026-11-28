@@ -3,7 +3,7 @@
  * a free-text option, and skip/decline/submit. The tool call is blocked while
  * the card is open, so the composer stays mounted and steerable. */
 
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { useAppStore } from '../../state/appStore'
 import { useAskStore, useSessionStore, type PendingAsk } from '../../state/stores'
 import { pendingForProject } from '../../state/pendingProject'
@@ -15,13 +15,14 @@ import {
   emptyAskDraft,
   openQuestion,
   selectOption,
+  setCollapsed,
   setCustomText,
   skipAnswer,
   type AskDraft,
 } from '../../state/askDraft'
 import { useT } from '../../i18n/locale'
 import { Button } from '../primitives'
-import { SparkIcon } from '../icons'
+import { ChevronDownIcon, SparkIcon } from '../icons'
 import css from './AskCard.module.css'
 
 export function AskCard() {
@@ -60,6 +61,8 @@ function AskCardBody({ request }: { request: PendingAsk }) {
       : emptyAskDraft(request.questions)
 
   const index = draft.index
+  const collapsed = draft.collapsed
+  const bodyId = useId()
   const current = request.questions[index]
   const currentDraft = draft.answers[index]
   const statuses = draftStatuses(draft)
@@ -91,8 +94,14 @@ function AskCardBody({ request }: { request: PendingAsk }) {
   }
 
   return (
-    <div className={css.root}>
-      <section className={css.card} role="region" aria-label={t('ask.title')} data-testid="ask-card">
+    <div className={css.root} data-ask-card>
+      <section
+        className={css.card}
+        role="region"
+        aria-label={t('ask.title')}
+        data-collapsed={collapsed || undefined}
+        data-testid="ask-card"
+      >
         <header className={css.strip}>
           <span className={css.stripIcon} aria-hidden>
             <SparkIcon size={12} />
@@ -118,121 +127,138 @@ function AskCardBody({ request }: { request: PendingAsk }) {
                   data-current={position === index || undefined}
                   aria-label={t(`ask.status.${status}`, { number: position + 1 })}
                   aria-current={position === index ? 'step' : undefined}
-                  onClick={() => updateDraft(openQuestion(draft, position))}
+                  onClick={() =>
+                    updateDraft(setCollapsed(openQuestion(draft, position), false))
+                  }
                 />
               ))}
             </div>
           )}
+          <button
+            type="button"
+            className={css.fold}
+            aria-label={collapsed ? t('ask.expand') : t('ask.collapse')}
+            title={collapsed ? t('ask.expand') : t('ask.collapse')}
+            aria-controls={bodyId}
+            aria-expanded={!collapsed}
+            onClick={() => updateDraft(setCollapsed(draft, !collapsed))}
+          >
+            <ChevronDownIcon size={16} />
+          </button>
         </header>
 
-        <div className={css.body}>
-          <div className={css.questionBlock}>
-            {current.header !== undefined && (
-              <span className={css.questionHeader}>{current.header}</span>
-            )}
-            <h3 className={css.question}>
-              <span className={css.questionBody} tabIndex={0}>
-                {current.question}
-              </span>
-            </h3>
-          </div>
+        <div id={bodyId} className={css.clip} aria-hidden={collapsed}>
+          <div className={css.clipInner}>
+            <div className={css.body}>
+              <div className={css.questionBlock}>
+                {current.header !== undefined && (
+                  <span className={css.questionHeader}>{current.header}</span>
+                )}
+                <h3 className={css.question}>
+                  <span className={css.questionBody} tabIndex={0}>
+                    {current.question}
+                  </span>
+                </h3>
+              </div>
 
-          <div
-            className={css.options}
-            role={current.multi ? 'group' : 'radiogroup'}
-            aria-label={current.question}
-          >
-            {current.options.map((option, position) => {
-              const selected = currentDraft.values.includes(option.label)
-              const recommended = option.label === current.recommended
-              return (
+              <div
+                className={css.options}
+                role={current.multi ? 'group' : 'radiogroup'}
+                aria-label={current.question}
+              >
+                {current.options.map((option, position) => {
+                  const selected = currentDraft.values.includes(option.label)
+                  const recommended = option.label === current.recommended
+                  return (
+                    <button
+                      key={`${option.label}-${position}`}
+                      type="button"
+                      className={css.option}
+                      data-selected={selected || undefined}
+                      role={current.multi ? 'checkbox' : 'radio'}
+                      aria-checked={current.multi ? undefined : selected}
+                      aria-pressed={current.multi ? selected : undefined}
+                      onClick={() =>
+                        updateDraft(
+                          selectOption(draft, index, option.label, current.multi),
+                        )
+                      }
+                    >
+                      <span className={css.optionMark} aria-hidden>
+                        {selected ? '✓' : ''}
+                      </span>
+                      <span className={css.optionCopy}>
+                        <span className={css.optionLabel}>
+                          {option.label}
+                          {recommended && (
+                            <span className={css.recommended}>
+                              {t('ask.recommended')}
+                            </span>
+                          )}
+                        </span>
+                        {option.description !== undefined && (
+                          <span className={css.optionDescription}>
+                            {option.description}
+                          </span>
+                        )}
+                      </span>
+                    </button>
+                  )
+                })}
                 <button
-                  key={`${option.label}-${position}`}
                   type="button"
                   className={css.option}
-                  data-selected={selected || undefined}
+                  data-selected={currentDraft.customSelected || undefined}
                   role={current.multi ? 'checkbox' : 'radio'}
-                  aria-checked={current.multi ? undefined : selected}
-                  aria-pressed={current.multi ? selected : undefined}
+                  aria-checked={current.multi ? undefined : currentDraft.customSelected}
+                  aria-pressed={current.multi ? currentDraft.customSelected : undefined}
                   onClick={() =>
-                    updateDraft(
-                      selectOption(draft, index, option.label, current.multi),
-                    )
+                    updateDraft(selectOption(draft, index, CUSTOM_OPTION, current.multi))
                   }
                 >
                   <span className={css.optionMark} aria-hidden>
-                    {selected ? '✓' : ''}
+                    {currentDraft.customSelected ? '✓' : ''}
                   </span>
-                  <span className={css.optionCopy}>
-                    <span className={css.optionLabel}>
-                      {option.label}
-                      {recommended && (
-                        <span className={css.recommended}>
-                          {t('ask.recommended')}
-                        </span>
-                      )}
-                    </span>
-                    {option.description !== undefined && (
-                      <span className={css.optionDescription}>
-                        {option.description}
-                      </span>
-                    )}
-                  </span>
+                  <span className={css.optionCopy}>{t('ask.customOption')}</span>
                 </button>
-              )
-            })}
-            <button
-              type="button"
-              className={css.option}
-              data-selected={currentDraft.customSelected || undefined}
-              role={current.multi ? 'checkbox' : 'radio'}
-              aria-checked={current.multi ? undefined : currentDraft.customSelected}
-              aria-pressed={current.multi ? currentDraft.customSelected : undefined}
-              onClick={() =>
-                updateDraft(selectOption(draft, index, CUSTOM_OPTION, current.multi))
-              }
-            >
-              <span className={css.optionMark} aria-hidden>
-                {currentDraft.customSelected ? '✓' : ''}
-              </span>
-              <span className={css.optionCopy}>{t('ask.customOption')}</span>
-            </button>
-          </div>
+              </div>
 
-          {currentDraft.customSelected && (
-            <input
-              className={css.customInput}
-              value={currentDraft.customText}
-              placeholder={t('ask.customPlaceholder')}
-              aria-label={t('ask.customOption')}
-              autoFocus
-              onChange={(event) =>
-                updateDraft(setCustomText(draft, index, event.target.value))
-              }
-            />
-          )}
+              {currentDraft.customSelected && (
+                <input
+                  className={css.customInput}
+                  value={currentDraft.customText}
+                  placeholder={t('ask.customPlaceholder')}
+                  aria-label={t('ask.customOption')}
+                  autoFocus
+                  onChange={(event) =>
+                    updateDraft(setCustomText(draft, index, event.target.value))
+                  }
+                />
+              )}
+            </div>
+
+            <footer className={css.footer}>
+              <button
+                type="button"
+                className={css.decline}
+                disabled={resolving}
+                onClick={() => submit(request.questions.map(() => null))}
+              >
+                {t('ask.decline')}
+              </button>
+              <div className={css.footerMain}>
+                <Button variant="ghost" disabled={resolving} onClick={skip}>
+                  {t('ask.skip')}
+                </Button>
+                <Button variant="primary" disabled={resolving} onClick={goNext}>
+                  {index === request.questions.length - 1
+                    ? t('ask.submit')
+                    : t('ask.next')}
+                </Button>
+              </div>
+            </footer>
+          </div>
         </div>
-
-        <footer className={css.footer}>
-          <button
-            type="button"
-            className={css.decline}
-            disabled={resolving}
-            onClick={() => submit(request.questions.map(() => null))}
-          >
-            {t('ask.decline')}
-          </button>
-          <div className={css.footerMain}>
-            <Button variant="ghost" disabled={resolving} onClick={skip}>
-              {t('ask.skip')}
-            </Button>
-            <Button variant="primary" disabled={resolving} onClick={goNext}>
-              {index === request.questions.length - 1
-                ? t('ask.submit')
-                : t('ask.next')}
-            </Button>
-          </div>
-        </footer>
       </section>
     </div>
   )
