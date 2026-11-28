@@ -15,11 +15,21 @@
   position: absolute;
 }
 
+/* Zoomed in, the mask is a canvas: grab to pan, hold to show it. */
+.backdrop[data-zoomed] {
+  cursor: grab;
+}
+
+.backdrop[data-zoomed]:active {
+  cursor: grabbing;
+}
+
 .image {
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
   border-radius: var(--ds-radius-14);
   box-shadow: var(--dsw-elevation-prominent);
-  cursor: zoom-out;
+  user-select: none;
+  -webkit-user-drag: none;
 }
