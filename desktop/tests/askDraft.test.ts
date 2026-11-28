@@ -11,6 +11,7 @@ import {
   emptyAskDraft,
   openQuestion,
   selectOption,
+  setCollapsed,
   setCustomText,
   skipAnswer,
 } from '../src/state/askDraft.ts'
@@ -87,4 +88,20 @@ test('next marks an empty question skipped and clamps navigation', () => {
 
   const answered = advanceDraft(selectOption(draft, 0, 'SQLite', false))
   assert.equal(answered.answers[0].skipped, false)
+})
+
+test('a fresh draft is expanded', () => {
+  assert.equal(emptyAskDraft(questions).collapsed, false)
+})
+
+test('collapsing keeps every answer and the open question', () => {
+  let draft = emptyAskDraft(questions)
+  draft = selectOption(draft, 0, 'SQLite', false)
+  draft = openQuestion(draft, 1)
+  const collapsed = setCollapsed(draft, true)
+
+  assert.equal(collapsed.collapsed, true)
+  assert.equal(collapsed.index, 1)
+  assert.deepEqual(draftAnswers(collapsed), [['SQLite'], null])
+  assert.equal(setCollapsed(collapsed, false).collapsed, false)
 })

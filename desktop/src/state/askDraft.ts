@@ -16,6 +16,9 @@ export interface AskDraftAnswer {
 
 export interface AskDraft {
   index: number
+  /** Folded to a single status row. Per request: it rides the draft so a
+   * remount cannot pop the card back open. */
+  collapsed: boolean
   answers: AskDraftAnswer[]
 }
 
@@ -24,6 +27,7 @@ export type AskStatus = 'answered' | 'unanswered' | 'skipped'
 export function emptyAskDraft(questions: AskQuestion[]): AskDraft {
   return {
     index: 0,
+    collapsed: false,
     answers: questions.map(() => ({
       values: [],
       customSelected: false,
@@ -143,4 +147,8 @@ export function advanceDraft(draft: AskDraft): AskDraft {
 export function openQuestion(draft: AskDraft, index: number): AskDraft {
   const clamped = Math.min(Math.max(0, index), draft.answers.length - 1)
   return { ...draft, index: clamped }
+}
+
+export function setCollapsed(draft: AskDraft, collapsed: boolean): AskDraft {
+  return { ...draft, collapsed }
 }
