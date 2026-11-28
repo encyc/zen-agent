@@ -16,11 +16,13 @@ import type {
   McpServerRow,
   Mode,
   SecretProviderRow,
+  SessionSummary,
   SkillRow,
   StatusResult,
 } from '../rpc/types.ts'
 import {
   useApprovalStore,
+  useArchivedStore,
   useAskStore,
   useCatalogStore,
   useComposerStore,
@@ -106,6 +108,7 @@ interface AppState {
   client(): RpcClient
   refreshStatus(): Promise<void>
   refreshSessions(): Promise<void>
+  refreshArchivedSessions(): Promise<void>
   refreshCatalog(): Promise<void>
   refreshSecrets(): Promise<void>
   saveSecret(name: string, value: string): Promise<Record<string, unknown>>
@@ -146,6 +149,7 @@ interface AppState {
   openSession(path: string): Promise<void>
   resumeSession(path: string): Promise<void>
   deleteSession(path: string): Promise<void>
+  archiveSession(path: string, archived: boolean): Promise<void>
   renameSession(title: string): Promise<void>
   togglePin(pinned: boolean): Promise<void>
   importSession(path: string): Promise<boolean>
@@ -346,6 +350,21 @@ export const useAppStore = create<AppState>((set, get) => ({
           useSessionStore.getState().setSessions(sessions as never)
           const current = sessions.find((session) => session.current)
           useSessionStore.getState().setCurrent(current?.path ?? null)
+        }
+      })
+      .catch((error) => reportRefreshFailure('sessions', error))
+  },
+
+  refreshArchivedSessions() {
+    // The settings view's data: the same listing, filtered to archived only.
+    return get()
+      .client()
+      .send({ type: 'session', op: 'list', scope: 'all', archived: 'only' })
+      .then((frame) => {
+        if (frame.type === 'result' && frame.ok) {
+          useArchivedStore
+            .getState()
+            .setArchived((frame.sessions ?? []) as SessionSummary[])
         }
       })
       .catch((error) => reportRefreshFailure('sessions', error))
@@ -942,6 +961,28 @@ export const useAppStore = create<AppState>((set, get) => ({
   async deleteSession(path) {
     await runSessionOp(get, { type: 'session', op: 'delete', path }, () =>
       refreshAfterSessionChange(get),
+    )
+  },
+
+  async archiveSession(path, archived) {
+    await runSessionOp(
+      get,
+      { type: 'session', op: 'archive', path, archived },
+      async () => {
+        // Archiving the on-screen session would leave it as the sidebar's
+        // current-session placeholder: start a fresh conversation instead,
+        // the same surface behavior deleting it has. Its own refresh already
+        // observes the archive, so the only extra call is the settings view's.
+        if (archived && useSessionStore.getState().currentPath === path) {
+          await get().newSession()
+          await get().refreshArchivedSessions()
+          return
+        }
+        await Promise.all([
+          refreshAfterSessionChange(get),
+          get().refreshArchivedSessions(),
+        ])
+      },
     )
   },
 

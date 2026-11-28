@@ -76,6 +76,7 @@ export function SidebarCoding() {
   const renameSession = useAppStore((state) => state.renameSession)
   const togglePin = useAppStore((state) => state.togglePin)
   const deleteSession = useAppStore((state) => state.deleteSession)
+  const archiveSession = useAppStore((state) => state.archiveSession)
   const forkSession = useAppStore((state) => state.forkSession)
   const openSession = useAppStore((state) => state.openSession)
   const undoLast = useAppStore((state) => state.undoLast)
@@ -500,6 +501,22 @@ export function SidebarCoding() {
                   </button>
                 )}
               </>
+            )}
+            {/* Archive is reversible, so it is one click — the two-step arm
+                is delete's alone. A row with no transcript yet (placeholder or
+                live) has nothing to put away; the op would refuse it. */}
+            {(menuSession.messages > 0 || menuSession.path === currentPath) && (
+              <button
+                type="button"
+                role="menuitem"
+                className={css.menuItem}
+                onClick={() => {
+                  setMenu(null)
+                  void archiveSession(menuSession.path, true)
+                }}
+              >
+                {t('session.archive')}
+              </button>
             )}
             {/* Open beside the conversation: same project only (frames are
                 project-filtered on the wire), while the strip has room — and
