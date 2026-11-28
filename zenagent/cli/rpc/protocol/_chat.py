@@ -124,7 +124,21 @@ class SessionDequeueRequest(WireRequest):
 
 
 class SessionScopeRequest(WireRequest):
-    FIELDS: ClassVar[dict[str, Field]] = {"scope": Field(STRING_LAX)}
+    FIELDS: ClassVar[dict[str, Field]] = {
+        "scope": Field(STRING_LAX),
+        # exclude (default) | include | only; junk falls back to the
+        # handler's default — a filter is an optimization, not a contract.
+        "archived": Field(STRING_LAX),
+    }
+
+
+class SessionArchiveRequest(WireRequest):
+    """archive / restore: one saved session and the resulting state."""
+
+    FIELDS: ClassVar[dict[str, Field]] = {
+        "path": Field(STRING, required=True),
+        "archived": Field(BOOL, required=True),
+    }
 
 
 class _TranscriptPaging(WireRequest):
@@ -517,6 +531,11 @@ OPS: dict[str, OpSpec] = {
     "path": Field(STRING, nullable=True),
 }),
 "delete": OpSpec("session", SessionPathRequest, {"path": Field(STRING)}),
+"archive": OpSpec("session", SessionArchiveRequest, {
+    "path": Field(STRING),
+    "archived": Field(BOOL),
+    "archived_at": Field(FLOAT),
+}),
 "compact": OpSpec("session", NoFields, {
     "compacted": Field(BOOL),
     "path": Field(STRING, optional=True),

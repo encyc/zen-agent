@@ -11,6 +11,7 @@ slot's server.
 
 from __future__ import annotations
 
+import asyncio
 import json
 from collections import OrderedDict
 from collections.abc import Callable
@@ -157,6 +158,9 @@ class RpcHost(RunsOps, AutomationsOps):
             return True
         if kind == "session" and request.get("op") == "resume":
             await self._session_resume(request, request_id)
+            return True
+        if kind == "session" and request.get("op") == "archive":
+            await self._session_archive(request, request_id)
             return True
         if kind == "session" and request.get("op") == "list":
             holder = self._slot_for(request)
@@ -452,13 +456,20 @@ class RpcHost(RunsOps, AutomationsOps):
         and the sidebar loses it. The host owns the slots; merge them here.
         """
         scope = "all" if request.get("scope") == "all" else "project"
+        archived = (
+            request.get("archived")
+            if request.get("archived") in ("exclude", "include", "only")
+            else "exclude"
+        )
         live = [
             other.runtime.session.path
             for other in self._slots.values()
             if other is not slot and (scope == "all" or other.root == slot.root)
         ]
         try:
-            frame = await session_list_frame(slot.server.sessions, scope=scope, live=live)
+            frame = await session_list_frame(
+                slot.server.sessions, scope=scope, live=live, archived=archived
+            )
         except Exception as exc:  # noqa: BLE001 - a bad listing is a result
             self._send(
                 failure_frame(
@@ -471,6 +482,63 @@ class RpcHost(RunsOps, AutomationsOps):
             )
             return
         self._send({"type": "result", "id": request_id, "ok": True, **frame})
+
+    async def _session_archive(self, request: dict, request_id) -> None:
+        """Archive/restore a session straight on the sidecar — no slot needed.
+
+        A session nobody holds is exactly the settings-page case (its project
+        may not even be open). Only *archiving* a session a busy slot holds as
+        current is refused: the run owns that conversation. Restoring touches
+        nothing a run could own, so it is never refused.
+        """
+        try:
+            target = request.get("path")
+            if not isinstance(target, str) or not target.strip():
+                raise Refusal("archive needs path")
+            archived = request.get("archived")
+            if not isinstance(archived, bool):
+                raise Refusal("archive needs archived: true or false")
+            path = Path(target).expanduser()
+            holder = self._session_holder(str(path), self._project_tag(request))
+            if archived and holder is not None and holder.busy:
+                raise Refusal(
+                    "busy: cancel the run before archiving a session",
+                    code="session_busy",
+                )
+            from zenagent.agent.session import set_session_archived
+
+            stamp = await asyncio.to_thread(set_session_archived, path, archived)
+        except Refusal as exc:
+            self._send(
+                error_frame(
+                    request_id,
+                    str(exc),
+                    exc.code or "session_invalid",
+                    {"op": "archive"},
+                )
+            )
+            return
+        except Exception as exc:  # noqa: BLE001 - a bad session op is a result
+            self._send(
+                failure_frame(
+                    request_id,
+                    code="session_invalid",
+                    message="session archive failed",
+                    exc=exc,
+                    op="archive",
+                )
+            )
+            return
+        self._send(
+            {
+                "type": "result",
+                "id": request_id,
+                "ok": True,
+                "path": str(path),
+                "archived": archived,
+                "archived_at": stamp,
+            }
+        )
 
     async def _session_resume(self, request: dict, request_id) -> None:
         """Resume without ever aborting a run that belongs to another session.

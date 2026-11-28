@@ -12,18 +12,21 @@ from zenagent.cli.rpc.errors import Refusal, error_frame, failure_frame
 
 
 async def session_list_frame(
-    sessions, *, scope: str, live: Iterable[Path] = ()
+    sessions, *, scope: str, live: Iterable[Path] = (), archived: str = "exclude"
 ) -> dict:
     """The ``session list`` answer, shared by a slot's server and the host.
 
     ``live`` names sessions other runtimes hold right now: a run streaming in
     a sibling slot has no transcript yet, so a listing that reads only files
     would drop it the moment the person switches away. The host knows its
-    slots; a lone runtime passes nothing.
+    slots; a lone runtime passes nothing. ``archived`` filters by the archive
+    sidecar — ``"exclude"`` is the sidebar, ``"only"`` the settings view.
     """
     # Listing parses every transcript in every project; off the loop it
     # cannot stall streaming events or the next request behind it.
-    entries = await asyncio.to_thread(sessions.entries, scope=scope, live=live)
+    entries = await asyncio.to_thread(
+        sessions.entries, scope=scope, live=live, archived=archived
+    )
     return {"scope": scope, "sessions": [entry.as_wire() for entry in entries]}
 
 
@@ -34,6 +37,15 @@ class MissingSessionFile(Refusal):
     def __init__(self, path: Path) -> None:
         super().__init__(f"no such session: {path}")
         self.path = path
+
+
+_ARCHIVE_MODES = ("exclude", "include", "only")
+
+
+def _archived_mode(request: dict) -> str:
+    """The listing's archive filter; junk keeps the sidebar default."""
+    mode = request.get("archived")
+    return mode if mode in _ARCHIVE_MODES else "exclude"
 
 
 def _optional_count(value: object, *, minimum: int) -> int | None:
@@ -249,7 +261,9 @@ class SessionOps:
             return {"path": str(path), "name": path.stem}
         if op == "list":
             scope = "all" if request.get("scope") == "all" else "project"
-            return await session_list_frame(self.sessions, scope=scope)
+            return await session_list_frame(
+                self.sessions, scope=scope, archived=_archived_mode(request)
+            )
         if op == "new":
             path = await self.sessions.new()
             if self.chat is not None:

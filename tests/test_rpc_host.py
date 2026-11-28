@@ -12,6 +12,7 @@ import pytest
 from zenagent.app.bootstrap import PreparedFrontend
 from zenagent.app.runtime import RuntimeOptions
 from zenagent.cli.rpc.host import RpcHost
+from zenagent import project
 from zenagent.cli.rpc.slot import RuntimeSlot
 from zenagent.project import project_key
 
@@ -631,3 +632,149 @@ async def test_session_list_keeps_a_sibling_slots_live_session(host_env):
     assert rows[str(alpha_live)]["project_path"] == str(host_env.alpha.resolve())
     assert rows[str(beta_live)]["current"] is True
     assert not alpha_live.exists() and not beta_live.exists()
+
+
+async def test_archive_op_writes_the_sidecar_without_a_slot(host_env):
+    """Archive is a host-side filesystem op: no slot needs to hold the
+    session, so the settings page can put away a project's history."""
+    from zenagent.agent.session import read_session_archived
+
+    host = host_env.build()
+    root = host_env.alpha
+    directory = project.project_sessions_dir(root=root)
+    directory.mkdir(parents=True, exist_ok=True)
+    target = directory / "20260101-000000.jsonl"
+    target.write_text(
+        json.dumps({"role": "user", "content": "old", "timestamp": 1}) + "\n",
+        encoding="utf-8",
+    )
+
+    frame = await call(
+        host,
+        host_env.writes,
+        {
+            "type": "session",
+            "op": "archive",
+            "path": str(target),
+            "archived": True,
+            "id": "a",
+        },
+    )
+
+    assert frame["ok"] is True
+    assert frame["path"] == str(target)
+    assert frame["archived"] is True
+    assert frame["archived_at"] > 0
+    assert read_session_archived(directory) == {target.name: frame["archived_at"]}
+
+    restore = await call(
+        host,
+        host_env.writes,
+        {
+            "type": "session",
+            "op": "archive",
+            "path": str(target),
+            "archived": False,
+            "id": "r",
+        },
+    )
+    assert restore["archived"] is False and restore["archived_at"] == 0.0
+    assert read_session_archived(directory) == {}
+
+
+async def test_archive_refuses_a_busy_holder_but_restore_never(host_env):
+    from zenagent.agent.session import read_session_archived
+
+    host = host_env.build()
+    target = _live_session(host_env.slot.runtime, "running.jsonl")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(
+        json.dumps({"role": "user", "content": "text", "timestamp": 1}) + "\n",
+        encoding="utf-8",
+    )
+    host_env.slot.chat.busy = True
+
+    frame = await call(
+        host,
+        host_env.writes,
+        {
+            "type": "session",
+            "op": "archive",
+            "path": str(target),
+            "archived": True,
+            "id": "a",
+        },
+    )
+    assert frame["type"] == "error"
+    assert frame["code"] == "session_busy"
+
+    restore = await call(
+        host,
+        host_env.writes,
+        {
+            "type": "session",
+            "op": "archive",
+            "path": str(target),
+            "archived": False,
+            "id": "r",
+        },
+    )
+    assert restore["ok"] is True
+
+
+async def test_archive_of_a_missing_file_is_a_session_invalid_refusal(host_env):
+    host = host_env.build()
+    frame = await call(
+        host,
+        host_env.writes,
+        {
+            "type": "session",
+            "op": "archive",
+            "path": str(host_env.alpha / "nope.jsonl"),
+            "archived": True,
+            "id": "a",
+        },
+    )
+    assert frame["type"] == "error"
+    assert frame["code"] == "session_invalid"
+
+
+async def test_session_list_honors_the_archived_filter(host_env):
+    from zenagent.agent.session import set_session_archived
+    from zenagent.app.sessions import SessionManager
+
+    host = host_env.build()
+    host_env.slot.server.sessions = SessionManager(host_env.slot.runtime)
+    directory = project.project_sessions_dir(root=host_env.alpha)
+    directory.mkdir(parents=True, exist_ok=True)
+    kept = directory / "20260101-000000.jsonl"
+    gone = directory / "20260101-010000.jsonl"
+    for path in (kept, gone):
+        path.write_text(
+            json.dumps({"role": "user", "content": "text", "timestamp": 1}) + "\n",
+            encoding="utf-8",
+        )
+    set_session_archived(gone, True)
+
+    default_frame = await call(
+        host, host_env.writes, {"type": "session", "op": "list", "scope": "all", "id": "l"}
+    )
+    names = {Path(row["path"]).name for row in default_frame["sessions"]}
+    assert "20260101-010000.jsonl" not in names
+    assert "20260101-000000.jsonl" in names
+
+    only_frame = await call(
+        host,
+        host_env.writes,
+        {
+            "type": "session",
+            "op": "list",
+            "scope": "all",
+            "archived": "only",
+            "id": "l2",
+        },
+    )
+    only_names = {Path(row["path"]).name for row in only_frame["sessions"]}
+    assert only_names == {"20260101-010000.jsonl"}
+    archived_row = only_frame["sessions"][0]
+    assert archived_row["archived"] is True and archived_row["archived_at"] > 0

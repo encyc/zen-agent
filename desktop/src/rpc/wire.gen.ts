@@ -177,6 +177,8 @@ export interface SessionSummary {
   messages: number
   current: boolean
   pinned: boolean
+  archived: boolean
+  archived_at: number
   created_at: number
   updated_at: number
   model: string
@@ -1308,6 +1310,7 @@ export interface SessionCurrentResult {
 export interface SessionListRequest {
   op: string
   scope?: string /** junk tolerated server-side (default applied). */
+  archived?: string /** junk tolerated server-side (default applied). */
 }
 
 export interface SessionListResult {
@@ -1386,6 +1389,21 @@ export interface SessionDeleteResult {
   id: string
   ok: true
   path: string
+}
+
+export interface SessionArchiveRequest {
+  op: string
+  path: string
+  archived: boolean
+}
+
+export interface SessionArchiveResult {
+  type: 'result'
+  id: string
+  ok: true
+  path: string
+  archived: boolean
+  archived_at: number
 }
 
 export interface SessionCompactRequest {
@@ -1504,6 +1522,7 @@ export type SessionRequest =
   | SessionImportRequest
   | SessionUndoRequest
   | SessionDeleteRequest
+  | SessionArchiveRequest
   | SessionCompactRequest
   | SessionRetryRequest
   | SessionExportRequest

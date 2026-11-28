@@ -482,3 +482,13 @@ def test_frontend_refined_view_shapes_stay_aligned():
         reg = _registry_shape(shape)["required"] | _registry_shape(shape)["optional"]
         ts = _ts_interface(ts_name)["required"] | _ts_interface(ts_name)["optional"]
         assert reg == ts, f"{shape}: registry={sorted(reg)} ts={sorted(ts)}"
+
+
+def test_session_summary_carries_archive_fields_and_the_archive_op():
+    ts = TS_PATH.read_text() + (TS_PATH.parent / "wire.gen.ts").read_text()
+    summary = re.search(r"export interface SessionSummary \{[^}]+\}", ts)
+    assert summary, "wire.gen.ts lost SessionSummary"
+    for field in ("archived: boolean", "archived_at: number"):
+        assert field in summary.group(0)
+    assert "export interface SessionArchiveRequest" in ts
+    assert "archived: boolean" in ts
