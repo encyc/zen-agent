@@ -24,6 +24,14 @@
   align-items: center;
   gap: 7px;
   padding: 8px 8px 0 12px;
+  /* Folded, the strip IS the card: it takes the bottom breathing room the body
+   * and footer used to supply, so the chevron is not flush with the border.
+   * Transitioned with the fold so the row grows into place rather than jumping. */
+  transition: padding-block-end var(--ds-transition-duration) var(--ds-ease-in-out);
+}
+
+.card[data-collapsed] .strip {
+  padding-block-end: 8px;
 }
 
 .stripIcon {

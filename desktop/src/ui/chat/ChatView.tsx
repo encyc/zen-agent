@@ -318,7 +318,15 @@ export function ChatView(props: ChatViewProps) {
   useLayoutEffect(() => {
     const node = askSeatRef.current
     const root = rootRef.current
-    if (node === null || root === null) return
+    if (root === null) return
+    // No seat means this instance no longer hosts the card (another pane took
+    // it, or this pane was just told not to render one). Give the band back:
+    // leaving the last height behind parks the pill and minimap above empty
+    // space for the rest of the session.
+    if (node === null) {
+      root.style.setProperty('--ask-card-height', '0px')
+      return
+    }
     const publish = () => {
       const height = Math.round(node.getBoundingClientRect().height)
       root.style.setProperty('--ask-card-height', `${Math.max(0, height)}px`)

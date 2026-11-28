@@ -3,6 +3,7 @@
  * the single-view layout. The pop-out is Tauri-only, so in the browser it
  * must fall back to a notice and keep the pane. */
 
+import assert from 'node:assert/strict'
 import { expect, test } from '@playwright/test'
 import { boot, emitEvent, initialState, presetState, type BridgeState } from './harness.ts'
 
@@ -119,4 +120,16 @@ test('a pending question renders in one pane only', async ({ page }) => {
     questions: [{ id: 'go', question: '继续吗？', options: [{ label: '继续' }], multi: false }],
   })
   await expect(page.getByTestId('ask-card')).toHaveCount(1)
+
+  // Handing the card to the other pane must also hand back the first pane's
+  // reserved band: a stale --ask-card-height would keep its pill and minimap
+  // parked above empty space for the rest of the session. The card starts in
+  // the focused pane (a); focusing b moves it, which is the frame in question.
+  await page.locator('[data-pane="/sessions/b.jsonl"] [data-pane-header]').click()
+  await expect(page.getByTestId('ask-card')).toHaveCount(1)
+  const band = await page.locator('[data-pane="/sessions/a.jsonl"]').evaluate((pane) => {
+    const actor = pane.querySelector<HTMLElement>('[data-chat-scroll]')?.parentElement
+    return actor?.style.getPropertyValue('--ask-card-height') ?? 'unset'
+  })
+  assert.equal(band, '0px')
 })
