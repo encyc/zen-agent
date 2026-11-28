@@ -4,7 +4,7 @@
  * must fall back to a notice and keep the pane. */
 
 import { expect, test } from '@playwright/test'
-import { boot, initialState, presetState, type BridgeState } from './harness.ts'
+import { boot, emitEvent, initialState, presetState, type BridgeState } from './harness.ts'
 
 test('two sessions sit side by side after open-in-split', async ({ page }) => {
   await boot(page, initialState())
@@ -105,4 +105,18 @@ test('the pop-out falls back to a notice in the browser and keeps the pane', asy
   // the dock, which the strip replaces) and the pane stays.
   await expect(page.getByTestId('notification-dot')).toBeVisible()
   await expect(page.locator('[data-pane="/sessions/b.jsonl"]')).toBeVisible()
+})
+
+test('a pending question renders in one pane only', async ({ page }) => {
+  await boot(page, initialState())
+  await page.locator('[data-session-path="/sessions/b.jsonl"] [data-action="menu"]').click()
+  await page.locator('[data-open-split]').click()
+  await expect(page.locator('[data-pane]')).toHaveCount(2)
+
+  await emitEvent(page, {
+    type: 'ask_request',
+    request_id: 'q-pane',
+    questions: [{ id: 'go', question: '继续吗？', options: [{ label: '继续' }], multi: false }],
+  })
+  await expect(page.getByTestId('ask-card')).toHaveCount(1)
 })

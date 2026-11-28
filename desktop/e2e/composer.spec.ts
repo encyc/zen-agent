@@ -317,6 +317,78 @@ test('a pending question keeps a way back to the tail from anywhere', async ({ p
   await expect(page.getByTestId('ask-card')).toBeInViewport()
 })
 
+test('a growing ask card stays in view while the reader follows the tail', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 720 })
+  const transcript = Array.from({ length: 12 }, (_, index) => [
+    { kind: 'user', id: `u${index}`, text: `第 ${index} 轮`, timestamp: index * 2 + 1 },
+    { kind: 'assistant', id: `a${index}`, text: '回复 '.repeat(60), timestamp: index * 2 + 2 },
+  ]).flat()
+  await boot(page, initialState({ transcript }))
+  await emitEvent(page, {
+    type: 'ask_request',
+    request_id: 'q-grow',
+    questions: [
+      {
+        id: 'db',
+        question: '用哪个数据库？',
+        options: [{ label: 'SQLite' }, { label: 'Postgres' }],
+        multi: false,
+      },
+    ],
+  })
+  const card = page.getByTestId('ask-card')
+  await expect(card).toBeVisible()
+  const tailDistance = () =>
+    page.locator('[data-chat-scroll]').evaluate((el) =>
+      el.scrollHeight - el.scrollTop - el.clientHeight,
+    )
+  await expect.poll(tailDistance).toBeLessThanOrEqual(8)
+
+  // Selecting the free-text row grows the card by an input row. The card sits
+  // above the composer's reserved band, so a few dozen pixels of growth would
+  // still be *visible* without re-pinning — the claim is stronger: the view
+  // follows the growth, i.e. it is still at the tail afterwards.
+  await card.getByRole('radio', { name: '其他（自己填写）' }).click()
+  await expect(card.getByPlaceholder('输入你的答案…')).toBeVisible()
+  await expect.poll(tailDistance).toBeLessThanOrEqual(8)
+  await expect(card).toBeInViewport()
+
+  const band = await page.evaluate(() => {
+    const seat = document.querySelector<HTMLElement>('[data-ask-seat]')
+    const host = seat?.closest<HTMLElement>('[data-chat-scroll]')?.parentElement
+    return host?.style.getPropertyValue('--ask-card-height') ?? ''
+  })
+  assert.ok(Number.parseFloat(band) > 0, `--ask-card-height=${band}`)
+})
+
+test('answering the question leaves the reader at the tail', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 720 })
+  const transcript = Array.from({ length: 12 }, (_, index) => [
+    { kind: 'user', id: `u${index}`, text: `第 ${index} 轮`, timestamp: index * 2 + 1 },
+    { kind: 'assistant', id: `a${index}`, text: '回复 '.repeat(60), timestamp: index * 2 + 2 },
+  ]).flat()
+  await boot(page, initialState({ transcript }))
+  await emitEvent(page, {
+    type: 'ask_request',
+    request_id: 'q-shrink',
+    questions: [{ id: 'go', question: '继续吗？', options: [{ label: '继续' }], multi: false }],
+  })
+  await page.getByTestId('ask-card').getByRole('button', { name: '不回答' }).click()
+  await expect(page.getByTestId('ask-card')).toHaveCount(0)
+  const distance = await page.locator('[data-chat-scroll]').evaluate((el) =>
+    el.scrollHeight - el.scrollTop - el.clientHeight,
+  )
+  assert.ok(distance <= 8, `tail distance after the card left: ${distance}`)
+  // The band the floating pill/minimap/handles offset by has to collapse with
+  // the card: a stale height would park them above empty space for good.
+  const band = await page.evaluate(() => {
+    const seat = document.querySelector('[data-ask-seat]')
+    const host = seat?.closest<HTMLElement>('[data-chat-scroll]')?.parentElement
+    return host?.style.getPropertyValue('--ask-card-height') ?? ''
+  })
+  assert.equal(band, '0px')
+})
+
 test('composer menus open directly above their own trigger', async ({ page }) => {
   await boot(page, initialState())
   const mode = page.locator('[data-menu-trigger="mode"]')
