@@ -92,6 +92,14 @@ slot 级 kind（`RpcServer`）：`hello` `prompt` `cancel` `status` `shutdown` `
 2. **`app/rewind.py` checkpoint 无 wire 面**——纯模型侧工具。
 3. **`app/slash_args.py` 的 argument_values 未暴露**——GUI/REPL 命令参数补全只能硬编码。
 
+### 已知坑 · 桌面壳曾用 `--no-mcp` 起子进程
+
+`desktop/src/state/prefs.ts::spawnArgs()` 在第一版壳里带上了 `--no-mcp`，而 GUI 的 MCP 页与
+Plugins 页**都通过这个子进程的 runtime 生效**（`ops_skills.py::_mcp_rows`、
+`ops_plugins.py::_plugins_rows` 读的是 `runtime.mcp`）。后果是 GUI 里每个 server 都显示 "off"、
+每个插件都 "ready" 但用不了，而 `/mcp test`（独立 probe）照样能连——于是看起来像"服务器坏了"。
+已移除该 flag，`desktop/tests/prefs.test.ts` 钉住它不会再回来。
+
 ### P1 · 端级缺口（app 层/RPC 已就绪，端没接）
 
 1. runs 视图：TUI 已做（`/runs`，四端第一个）；GUI 待接同一 `runs` op。

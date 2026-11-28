@@ -256,8 +256,9 @@ async def test_builtin_rows_are_listed_and_switched(runtime_factory, monkeypatch
     # A builtin row must never carry a command line: the user did not author it.
     assert "command" not in rows[builtin.COMPUTE_USE_ID]
 
-    # This runtime runs with MCP off, so enabling cannot connect: the write must
-    # be rolled back with a readable reason rather than left claiming "on".
+    # This runtime runs with MCP off (the desktop shell spawns `zen rpc
+    # --no-mcp`), so enabling cannot connect: the write must be rolled back with
+    # a reason that names that cause, not a generic "unknown error".
     failed = await call(
         server,
         writes,
@@ -265,7 +266,8 @@ async def test_builtin_rows_are_listed_and_switched(runtime_factory, monkeypatch
     )
     assert failed["ok"] is True
     assert failed["builtin"][0]["enabled"] is False
-    assert failed["problem"] and "did not connect" in failed["problem"]
+    assert failed["problem"] and "--no-mcp" in failed["problem"]
+    assert "cannot start" in failed["problem"]
     assert builtin.is_builtin_enabled(builtin.COMPUTE_USE_ID) is False
 
     # Disabling has to drop the live connection, not just the preference: a row

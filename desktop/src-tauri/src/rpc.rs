@@ -54,7 +54,8 @@ pub struct StartOptions {
     /// Working directory handed to `--cwd`.
     #[serde(default)]
     pub cwd: Option<String>,
-    /// Extra CLI flags after `rpc` (e.g. `["--mode","plan","--no-mcp"]`).
+    /// Extra CLI flags after `rpc` (e.g. `["--mode","plan"]`). MCP stays on:
+    /// the shell's MCP/Plugins pages act through this child's manager.
     #[serde(default)]
     pub args: Vec<String>,
 }

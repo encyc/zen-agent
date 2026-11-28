@@ -231,13 +231,34 @@ class SkillsOps:
             return []
 
     def _builtin_connect_failure(self, target: str) -> str | None:
-        """Why a just-enabled builtin server is not connected, or ``None``."""
+        """Why a just-enabled builtin server is not connected, or ``None``.
+
+        The three cases are distinguishable and each needs its own sentence: MCP
+        switched off for this process (the desktop shell spawns ``zen rpc
+        --no-mcp``), the server never reached the manager, or it reached it and
+        failed. Folding them into one "unknown error" is what made the first
+        report from the GUI unactionable.
+        """
+        runtime = self.runtime
+        if runtime is None or not getattr(getattr(runtime, "profile", None), "mcp", True):
+            return (
+                f"{BUILTIN_SERVERS[target].label} cannot start: MCP is disabled for "
+                "this session (--no-mcp)"
+            )
         row = next(
             (item for item in self._builtin_mcp_rows() if item["id"] == target), None
         )
         if row is None or row["state"] == "connected":
             return None
-        return f"{row['label']} did not connect: {row['error'] or 'unknown error'}"
+        if runtime.mcp is None:
+            return (
+                f"{BUILTIN_SERVERS[target].label} did not connect: no MCP manager is "
+                "running in this session"
+            )
+        return (
+            f"{BUILTIN_SERVERS[target].label} did not connect: "
+            f"{row['error'] or 'the server was never started'}"
+        )
 
     def _mcp_result(self, request_id) -> dict:
         try:

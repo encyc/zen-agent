@@ -91,11 +91,16 @@ export const SPAWN_RETRIES = 3
  * crash without an explicit mode); the user's own mode travels as a replay
  * frame once the child is up, so a stale pref can never fail a spawn.
  *
+ * **No `--no-mcp`.** The shell ships an MCP settings page (add/test/remove) and
+ * a Plugins page; both act through this child's runtime, so a child with MCP
+ * off makes every server in them unreachable and every plugin "ready" but
+ * unusable. MCP servers are the one thing the GUI must be able to switch on.
+ *
  * `resume` opens that session as the child boots: a project switch then
  * arrives with its transcript already attached, instead of booting a blank
  * session and replacing it with an RPC resume one round trip later. */
 export function spawnArgs(resume?: string | null): string[] {
-  const args = ['--mode', 'ask', '--no-mcp', '--retries', String(SPAWN_RETRIES)]
+  const args = ['--mode', 'ask', '--retries', String(SPAWN_RETRIES)]
   if (resume) args.push('--resume', resume)
   return args
 }

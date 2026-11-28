@@ -75,20 +75,27 @@ test('savePref null clears the stored value', () => {
 })
 
 test('spawnArgs pins the released-binary-safe defaults', () => {
-  assert.deepEqual(spawnArgs(), ['--mode', 'ask', '--no-mcp', '--retries', '3'])
+  assert.deepEqual(spawnArgs(), ['--mode', 'ask', '--retries', '3'])
+})
+
+test('spawnArgs leaves MCP on: the settings page acts through this child', () => {
+  // A child spawned with --no-mcp has no manager, so every server on the MCP
+  // page reads "off" and every plugin is unreachable. The GUI must never
+  // disable the one subsystem it exposes settings for.
+  assert.ok(!spawnArgs().includes('--no-mcp'))
+  assert.ok(!spawnArgs('/sessions/c.jsonl').includes('--no-mcp'))
 })
 
 test('spawnArgs resumes a session on the child that replaces another project', () => {
   assert.deepEqual(spawnArgs('/sessions/c.jsonl'), [
     '--mode',
     'ask',
-    '--no-mcp',
     '--retries',
     '3',
     '--resume',
     '/sessions/c.jsonl',
   ])
-  assert.deepEqual(spawnArgs(null), ['--mode', 'ask', '--no-mcp', '--retries', '3'])
+  assert.deepEqual(spawnArgs(null), ['--mode', 'ask', '--retries', '3'])
 })
 
 test('replayFrames order: mode, then model, thinking last', () => {
