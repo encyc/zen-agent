@@ -9,10 +9,10 @@ from types import SimpleNamespace
 
 import pytest
 
+from zenagent import project
 from zenagent.app.bootstrap import PreparedFrontend
 from zenagent.app.runtime import RuntimeOptions
 from zenagent.cli.rpc.host import RpcHost
-from zenagent import project
 from zenagent.cli.rpc.slot import RuntimeSlot
 from zenagent.project import project_key
 
@@ -683,8 +683,6 @@ async def test_archive_op_writes_the_sidecar_without_a_slot(host_env):
 
 
 async def test_archive_refuses_a_busy_holder_but_restore_never(host_env):
-    from zenagent.agent.session import read_session_archived
-
     host = host_env.build()
     target = _live_session(host_env.slot.runtime, "running.jsonl")
     target.parent.mkdir(parents=True, exist_ok=True)
