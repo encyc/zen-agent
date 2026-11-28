@@ -1,0 +1,1 @@
+View an image file (png/jpeg/gif/webp, up to {{max_mb}} MB) with vision: screenshots you captured, images in the project. Returns the image itself, not text. A model without image input gets a placeholder instead.

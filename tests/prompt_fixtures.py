@@ -24,7 +24,7 @@ def golden_tools():
     return base_tools(build_ask_tool(lambda: None))
 
 
-#: The 11 built-in tools, in base_tools order (v0.4.1).
+#: The 12 built-in tools, in base_tools order.
 ALL_TOOL_NAMES = tuple(tool.name for tool in golden_tools())
 
 #: A minimal AGENTS.md body; the wrapper adds "## Project instructions".

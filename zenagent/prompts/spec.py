@@ -24,7 +24,7 @@ __all__ = [
 
 #: Bumped whenever block content changes; recorded in eval reports and the
 #: prompt CHANGELOG.
-PROMPT_VERSION = "2026-11-28.1"
+PROMPT_VERSION = "2026-11-28.2"
 
 CacheClass = Literal["stable", "session", "volatile"]
 
@@ -55,7 +55,10 @@ BLOCKS: dict[str, BlockSpec] = {
         path="system/environment.md",
         version=PROMPT_VERSION,
         cache_class="stable",
-        budget_chars=240,
+        # 240 -> 244: the block renders the tool roster, so a twelfth builtin
+        # (read_image, 2026-11-28.2) grows the rendered text by its name's
+        # length; the ceiling tracks the roster, not a prose change.
+        budget_chars=244,
         required_vars=("cwd", "tool_list"),
     ),
     "system.tool_policy": BlockSpec(
@@ -210,6 +213,7 @@ SYSTEM_BLOCK_ORDER: tuple[str, ...] = (
 #: renders these. Keep the order in sync with the tool roster tests.
 TOOL_BLOCK_NAMES: tuple[str, ...] = (
     "read_file",
+    "read_image",
     "write_file",
     "edit_file",
     "list_dir",
@@ -235,6 +239,7 @@ TOOL_BLOCK_NAMES: tuple[str, ...] = (
 #: implementation constants stay the single source of truth.
 _TOOL_VARS: dict[str, tuple[str, ...]] = {
     "read_file": ("default_read_limit", "max_read_limit"),
+    "read_image": ("max_mb",),
     "glob": ("max_glob_results",),
     "grep": ("max_grep_files_per_page", "max_grep_hits_per_file"),
     "web_search": ("max_results",),

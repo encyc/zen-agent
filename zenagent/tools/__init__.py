@@ -14,6 +14,7 @@ from zenagent.agent.protocol import AgentTool
 from zenagent.tools.automations import build_automation_tools
 from zenagent.tools.bash import BASH, build_bash_tool
 from zenagent.tools.fs import EDIT_FILE, LIST_DIR, READ_FILE, WRITE_FILE
+from zenagent.tools.read_image import READ_IMAGE
 from zenagent.tools.search import GLOB, GREP
 from zenagent.tools.sessions import build_session_tools
 from zenagent.tools.wait import WAIT
@@ -28,6 +29,7 @@ __all__ = [
     "GREP",
     "LIST_DIR",
     "READ_FILE",
+    "READ_IMAGE",
     "WAIT",
     "WEB_SEARCH",
     "WRITE_FILE",
@@ -37,6 +39,7 @@ __all__ = [
 #: Every tool the coding agent offers, in prompt order.
 ALL_TOOLS = [
     READ_FILE,
+    READ_IMAGE,
     WRITE_FILE,
     EDIT_FILE,
     LIST_DIR,
@@ -96,6 +99,7 @@ def base_tools(
             else build_bash_tool(shell_max_output_bytes)
         )
         read_file = READ_FILE
+        read_image = READ_IMAGE
         write_file = WRITE_FILE
         edit_file = EDIT_FILE
         list_dir = LIST_DIR
@@ -104,6 +108,7 @@ def base_tools(
     else:
         bash = build_bash_tool(shell_max_output_bytes, cwd=cwd)
         read_file = _bound(READ_FILE, cwd)
+        read_image = _bound(READ_IMAGE, cwd)
         write_file = _bound(WRITE_FILE, cwd)
         edit_file = _bound(EDIT_FILE, cwd)
         list_dir = _bound(LIST_DIR, cwd)
@@ -118,6 +123,7 @@ def base_tools(
     )
     return [
         read_file,
+        read_image,
         write_file,
         edit_file,
         list_dir,

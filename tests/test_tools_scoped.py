@@ -86,3 +86,16 @@ async def test_bash_relative_cwd_arguments_rebase_on_the_bound_cwd(tmp_path):
     )
 
     assert result.content[0].text.strip().endswith(str(sub.resolve()))
+
+
+async def test_read_image_resolves_under_the_bound_cwd(tmp_path):
+    alpha = tmp_path / "alpha"
+    alpha.mkdir()
+    (alpha / "shot.png").write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 16)
+
+    result = await _tool(base_tools(_ask(), cwd=alpha), "read_image").execute(
+        "c1", {"path": "shot.png"}, None, None
+    )
+
+    assert not result.is_error
+    assert result.details["path"] == str(alpha / "shot.png")

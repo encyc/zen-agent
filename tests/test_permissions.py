@@ -208,6 +208,7 @@ async def test_every_builtin_tool_declares_an_approval_tier():
 
     tiers = {tool.name: tool.approval for tool in ALL_TOOLS}
     assert tiers["read_file"] == "read"
+    assert tiers["read_image"] == "read"
     assert tiers["list_dir"] == "read"
     assert tiers["glob"] == "read"
     assert tiers["grep"] == "read"
@@ -649,3 +650,19 @@ async def test_plan_mode_gates_the_automation_tools(tmp_path):
     )
     assert allowed is False
     assert "plan mode" in reason
+
+
+async def test_read_image_is_gated_exactly_like_read_file():
+    """An image read is a file read: same verdicts, protected paths included."""
+    gate = PermissionGate(interactive=False, mode="auto")
+    for path in ("~/.zenagent/settings.json", "~/.ssh/id_ed25519", "/etc/hosts", "README.md"):
+        assert await gate.check("read_image", {"path": path}) == await gate.check(
+            "read_file", {"path": path}
+        ), path
+
+
+def test_read_image_is_in_every_read_tool_list():
+    from zenagent.app import permissions
+
+    for name in ("READ_ONLY_TOOLS", "_PATH_READ_TOOLS", "_PATH_TARGET_TOOLS"):
+        assert "read_image" in getattr(permissions, name), name

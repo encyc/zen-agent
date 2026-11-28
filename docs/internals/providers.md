@@ -78,7 +78,8 @@ Chat Completions 系 request 里 `prompt + max_tokens` 超过上下文窗口会�
 ## 图片：tool result 里的图怎么到达模型
 
 `supports_vision` 是唯一开关（`catalog.yaml` 的模型条目）。请求映射前统一过
-`providers/history.py` 的两个投影：
+`providers/history.py` 的两个投影。内置工具里，`read_image` 和经 `desktop` 代理的 MCP
+结果会带回图片块：
 
 - `downgrade_unsupported_images`：非 vision 模型把 user / tool result 里的图换成
   `(image omitted: model does not support images)` / `(tool image omitted: …)`

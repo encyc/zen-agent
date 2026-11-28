@@ -131,7 +131,7 @@ async def test_child_only_gets_read_only_tools_and_never_task_itself():
     await tool.execute("t1", {"prompt": "go"})
 
     child_tools = set(stream.tools_seen[0])
-    assert child_tools <= {"read_file", "glob", "grep", "list_dir", "web_search", "fetch"}
+    assert child_tools <= {"read_file", "read_image", "glob", "grep", "list_dir", "web_search", "fetch"}
     assert "write_file" not in child_tools and "bash" not in child_tools
     assert "task" not in child_tools
 

@@ -4,6 +4,20 @@ Every content change bumps `PROMPT_VERSION` (`zenagent/prompts/spec.py`) and get
 one entry here: what changed, why, and the experiment/report that justified it.
 P0 extracted the v0.4.1 text verbatim — no behavior change.
 
+## 2026-11-28.2 — `read_image` joins the roster
+
+- One block is new: `tool.read_image` (204 chars, budget 900). It documents the
+  read-only tool that returns an image file as an image block, so the model can
+  look at a screenshot it captured instead of measuring pixels with a script.
+- Why a tool instead of widening `read_file`: `read_file` is text-only by
+  contract (paging, the read-before-write gate). Images have none of that and
+  ride the kernel's existing image path (budget pass-through, blob spill,
+  per-adapter hoisting) unchanged.
+- Tool budget impact: total description chars 8020 → 8224 of 20000; the new
+  tool's schema is 134 bytes.
+- `system.environment` renders the tool roster, so the twelfth builtin grows it
+  past its ceiling: budget 240 → 244 (spec comment records the rule).
+
 ## 2026-11-28.1 — Computer Use enters the roster
 
 - One block is new: `tool.desktop` (889 chars, budget 900). It documents the

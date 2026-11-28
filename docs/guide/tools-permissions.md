@@ -5,6 +5,7 @@
 | 工具 | 能力 | 默认权限 |
 |---|---|---|
 | `read_file` | 读文本；默认 1000 行/次，可用 `offset`/`limit` 续读（硬上限 5000 行）；`line_numbers` 输出行号 | 只读，免确认 |
+| `read_image` | 看图：png/jpeg/gif/webp，按 magic byte 判断（不看扩展名），单张 ≤5MB；把图片本身作为图片块返回给模型，不支持图片的模型收到占位文字 | 只读，免确认 |
 | `write_file` | 覆盖写文件；拒绝用"截断的 read 页"回写（防数据丢失）；保留既有文件的可执行位 | 需确认 |
 | `edit_file` | 唯一匹配替换（old→new）；`replace_all` 可替换全部匹配 | 需确认 |
 | `list_dir` | 列目录（标记目录/文件） | 只读 |
@@ -154,7 +155,7 @@ auto / `--yes` → 放行；交互式 → 确认；否则拒绝。
 1. **allowlist 救不了危险命令**：`allow = ["*"]` 也不能放行 `rm -rf /`（auto 也不行，
    只有 `--allow-dangerous` 可以）。
 2. `--read-only` 下，`write_file`、`bash` 等写/执行工具全拒；
-   `read_file/grep/glob/list_dir/web_search/fetch/read_skill` 放行；
+   `read_file/read_image/grep/glob/list_dir/web_search/fetch/read_skill` 放行；
    MCP 里声明了 `readOnlyHint` 的工具也放行，其余 MCP 工具仍拒绝。
 3. 拒绝不是异常：工具调用收到 `is_error=True` 的结果，模型能看到原因并调整。
 4. 交互模式下 REPL 会问 `allow? [y/N]`；headless 没有交互，默认拒绝。
@@ -182,6 +183,7 @@ ToolResultAgent(
   `error`（真正的工具错误）、其余 `ok`——所以 `grep` 退出 1 仍然显示为正常结果，
   而 `exit code: -9 … [timed out after 120s]` 不会再画成一个绿点。
 - 并行执行时，所有结果按 assistant 请求顺序写回，`id` 一一对应。
+- `read_image` 的 content 是 `[TextContent, ImageContent]`：图片块不参与文本预算，`apply_result_budget` 原样保留。
 - 所有结果（含 MCP/扩展）在写回前统一过内核结果预算：单行 >2000 字符中间截断，
   文本 >40 KB 保留头尾并附截断提示；详见[工具内核](../internals/tools-internals.md)。
 
