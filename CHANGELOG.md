@@ -3,7 +3,7 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
-## Unreleased
+## v0.15.7 — 2026-11-28
 
 ### Added
 
