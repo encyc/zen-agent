@@ -220,8 +220,11 @@ class McpLayerRequest(WireRequest):
 
 
 class McpBuiltinRequest(WireRequest):
+    #: ``name``, never ``id``: the envelope's ``id`` is the request correlation
+    #: id and the client overwrites it on every send (see plugin's ``plugin``
+    #: field for the same reason).
     FIELDS: ClassVar[dict[str, Field]] = {
-        "id": Field(STRING, required=True),
+        "name": Field(STRING, required=True),
         "enabled": Field(BOOL, required=True),
     }
 

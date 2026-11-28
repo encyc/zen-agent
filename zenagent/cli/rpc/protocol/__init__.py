@@ -204,10 +204,31 @@ _ENVELOPE_ONLY_SUBS = {
 }
 
 
+#: Envelope keys a request model must never use as a business field. The client
+#: stamps both unconditionally on every send (``client.ts: nextId()``), so a
+#: ``{"op": "builtin", "id": "compute-use"}`` payload arrives with ``id``
+#: replaced by the correlation id — the field is dead on arrival. ``project`` and
+#: ``session`` are deliberately absent: those are real routing fields with
+#: exemptions in the same client. Hence ``plugin``/``name``-style naming.
+ENVELOPE_KEYS = frozenset({"id", "type"})
+
+
 def validate_registry() -> list[str]:
     """Structural problems a test can assert empty: dangling refs, stub
-    leakage (an op declaring no result keys outside the sanctioned stubs)."""
+    leakage (an op declaring no result keys outside the sanctioned stubs), and
+    request fields that collide with an envelope key."""
     problems: list[str] = []
+
+    def _check_envelope_fields(kind: str, spec, label: str, sub_name: str | None = None) -> None:
+        """A request field named after an envelope key is dead on arrival."""
+        collision = ENVELOPE_KEYS & set(spec.request.FIELDS)
+        if not collision:
+            return
+        where = f"{kind}.{sub_name}" if sub_name else kind
+        problems.append(
+            f"{label} op {where}: request field(s) {sorted(collision)} collide with "
+            "the envelope; the client overwrites them on send"
+        )
 
     def _check_table(table: dict, shapes: dict, label: str) -> None:
         for name, entry in shapes.items():
@@ -232,6 +253,8 @@ def validate_registry() -> list[str]:
                     problems.append(
                         f"{label} op {kind}.{sub_name}: sub-spec declares no result keys"
                     )
+                _check_envelope_fields(kind, sub, label, sub_name)
+            _check_envelope_fields(kind, spec, label)
 
     _check_table(OPS, SHAPES, "")
     _check_table(HOST_OPS, SHAPES | HOST_SHAPES, "host")

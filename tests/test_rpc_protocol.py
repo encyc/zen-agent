@@ -5,6 +5,7 @@ this file pins the registry's own rules)."""
 
 import re
 from pathlib import Path
+from typing import ClassVar
 
 from zenagent.cli.rpc import protocol
 
@@ -148,3 +149,38 @@ def test_events_declare_the_serializer():
         assert key in protocol.EVENT_FIELDS, (
             f"serialize_event emits {key}; declare it in EVENT_FIELDS"
         )
+
+
+def test_request_fields_never_collide_with_the_envelope():
+    """``id``/``type`` are stamped by the client on every send.
+
+    A request field named ``id`` is silently replaced by the correlation id
+    before it reaches the server (the bug that shipped ``mcp.builtin`` sending
+    ``id: "ral1u57"`` instead of the server name). ``project``/``session`` are
+    exempt: those are routing fields the client deliberately preserves.
+    """
+    assert protocol.ENVELOPE_KEYS == frozenset({"id", "type"})
+
+    collisions = []
+    for table in (protocol.OPS, protocol.HOST_OPS):
+        for kind, spec in table.items():
+            for sub_name, sub in {kind: spec, **(spec.subs or {})}.items():
+                bad = protocol.ENVELOPE_KEYS & set(sub.request.FIELDS)
+                if bad:
+                    collisions.append(f"{sub_name}: {sorted(bad)}")
+    assert collisions == []
+    # And the rule is enforced by the registry itself, not just here.
+    assert protocol.validate_registry() == []
+
+
+def test_the_registry_rejects_an_envelope_collision(monkeypatch):
+    """The check has to fail when it matters; a passing no-op is worthless."""
+    from zenagent.cli.rpc.protocol._core import BOOL, STRING, Field, OpSpec, WireRequest
+
+    class Bad(WireRequest):
+        FIELDS: ClassVar[dict] = {"id": Field(STRING, required=True), "enabled": Field(BOOL)}
+
+    bad_table = {"bad": OpSpec("bad", Bad, {"ok": Field(BOOL)})}
+    monkeypatch.setattr(protocol, "OPS", bad_table)
+    problems = protocol.validate_registry()
+    assert any("collide with the envelope" in problem for problem in problems)

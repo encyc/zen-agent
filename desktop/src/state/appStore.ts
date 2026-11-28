@@ -502,7 +502,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   async setBuiltinMcp(id, enabled) {
     const frame = await get()
       .client()
-      .send({ type: 'mcp', op: 'builtin', id, enabled })
+      .send({ type: 'mcp', op: 'builtin', name: id, enabled })
     if (frame.type === 'result' && frame.ok) {
       useMcpStore
         .getState()

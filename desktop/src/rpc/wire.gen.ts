@@ -1193,7 +1193,7 @@ export interface McpTestResult {
 
 export interface McpBuiltinRequest {
   op: string
-  id: string
+  name: string
   enabled: boolean
 }
 

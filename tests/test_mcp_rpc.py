@@ -261,7 +261,7 @@ async def test_builtin_rows_are_listed_and_switched(runtime_factory, monkeypatch
     failed = await call(
         server,
         writes,
-        {"type": "mcp", "op": "builtin", "id": builtin.COMPUTE_USE_ID, "enabled": True},
+        {"type": "mcp", "op": "builtin", "name": builtin.COMPUTE_USE_ID, "enabled": True},
     )
     assert failed["ok"] is True
     assert failed["builtin"][0]["enabled"] is False
@@ -273,7 +273,7 @@ async def test_builtin_rows_are_listed_and_switched(runtime_factory, monkeypatch
     disabled = await call(
         server,
         writes,
-        {"type": "mcp", "op": "builtin", "id": builtin.COMPUTE_USE_ID, "enabled": False},
+        {"type": "mcp", "op": "builtin", "name": builtin.COMPUTE_USE_ID, "enabled": False},
     )
     assert disabled["builtin"][0]["enabled"] is False
     assert disabled["builtin"][0]["state"] == "off"
@@ -286,6 +286,6 @@ async def test_builtin_op_rejects_an_unknown_id(runtime_factory, monkeypatch, tm
     server = build_server(runtime, writes)
 
     result = await call(
-        server, writes, {"type": "mcp", "op": "builtin", "id": "nope", "enabled": True}
+        server, writes, {"type": "mcp", "op": "builtin", "name": "nope", "enabled": True}
     )
     assert result["type"] == "error"

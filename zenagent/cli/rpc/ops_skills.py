@@ -267,7 +267,7 @@ class SkillsOps:
         write is reverted when the rebuild cannot connect, because a switch that
         says "on" while nothing is connected is a lie the next session repeats.
         """
-        target = request.get("id")
+        target = request.get("name")
         if not isinstance(target, str) or target not in BUILTIN_SERVERS:
             self._send(
                 {"type": "error", "id": request_id, "message": f"unknown builtin MCP server: {target}"}

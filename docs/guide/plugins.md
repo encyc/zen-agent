@@ -37,7 +37,11 @@
 面板顶部显示「本轮对话结束后生效」提示条。
 
 其他前端走同一个 RPC 操作：`{"type": "plugins", "op": "list" | "install" | "uninstall" | "enable" | "disable" | "configure", "plugin": "<id>", ...}`。
-插件 id 放在 `plugin` 字段（`id` 保留给 RPC 请求关联）。
+插件 id 放在 `plugin` 字段（`id` 保留给 RPC 请求关联）。同理，内置 server 的开关用
+`{"type": "mcp", "op": "builtin", "name": "compute-use", "enabled": true}`——`name` 不能写成
+`id`：客户端在 `desktop/src/rpc/client.ts` 的 `send()` 里无条件用关联 id 覆盖 `id`，
+业务名会被吃掉。这条规则有门禁：`protocol.validate_registry()` 会拒绝任何把 `id`/`type`
+当业务字段的请求模型。
 
 已安装插件在 `~/.zenagent/plugins/installed/<id>/`。发现阶段是**防御式**的：手工改坏的 manifest
 只产生一条警告并跳过该插件，不会拖垮整个列表。
