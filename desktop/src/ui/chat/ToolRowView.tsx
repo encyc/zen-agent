@@ -11,6 +11,7 @@ import { useT } from '../../i18n/locale'
 import type { FsReadResult, WorkspaceFile } from '../../rpc/types'
 import { toWorkspacePath } from '../rightbar/workspacePath'
 import { readImageTarget } from './readImagePreview'
+import { ImageLightbox } from './ImageLightbox'
 import {
   ActivityIcon,
   BotIcon,
@@ -161,6 +162,7 @@ export function ToolRowView({ node }: { node: ToolNode }) {
   const imagePath = target === null ? null : target.path
   const [image, setImage] = useState<WorkspaceFile | null>(null)
   const [imageState, setImageState] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
+  const [zoomed, setZoomed] = useState(false)
   const fetchStarted = useRef(false)
 
   // The image loads on first expansion (user request): the folded card stays
@@ -270,7 +272,14 @@ export function ToolRowView({ node }: { node: ToolNode }) {
                 <div className={css.imageNote}>{t('panel.files.error')}</div>
               )}
               {image !== null && image.kind === 'image' && (
-                <img className={css.imagePreview} src={image.data_url} alt={target.path} />
+                <button
+                  type="button"
+                  className={css.imageButton}
+                  onClick={() => setZoomed(true)}
+                  aria-label={t('tool.zoomImage')}
+                >
+                  <img className={css.imagePreview} src={image.data_url} alt={target.path} />
+                </button>
               )}
             </div>
           )}
@@ -318,6 +327,9 @@ export function ToolRowView({ node }: { node: ToolNode }) {
             </div>
           )}
         </div>
+      )}
+      {zoomed && target !== null && image !== null && image.kind === 'image' && (
+        <ImageLightbox src={image.data_url} alt={target.path} onClose={() => setZoomed(false)} />
       )}
     </div>
   )

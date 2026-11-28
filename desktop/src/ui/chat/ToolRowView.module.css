@@ -204,6 +204,14 @@
   padding: 8px;
 }
 
+.imageButton {
+  display: block;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: zoom-in;
+}
+
 .imagePreview {
   display: block;
   max-width: 100%;
