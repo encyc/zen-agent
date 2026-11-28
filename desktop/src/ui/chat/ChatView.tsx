@@ -360,7 +360,7 @@ export function ChatView(props: ChatViewProps) {
   const earlier = earlierRow(transcriptWindow.bounded, transcriptWindow.hiddenAbove, hasMoreBefore)
 
   return (
-    <div className={css.root} ref={rootRef}>
+    <div className={css.root} ref={rootRef} data-chat-pane>
       <div className={css.scroll} ref={attach} data-chat-scroll>
         {isEmpty ? (
           <>

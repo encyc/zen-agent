@@ -162,8 +162,11 @@ export function ToolRowView({ node }: { node: ToolNode }) {
   const imagePath = target === null ? null : target.path
   const [image, setImage] = useState<WorkspaceFile | null>(null)
   const [imageState, setImageState] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
-  const [zoomed, setZoomed] = useState(false)
+  const [zoomPane, setZoomPane] = useState<HTMLElement | null>(null)
   const fetchStarted = useRef(false)
+  // The zoom mask portals into the chat pane (found at click time) so it
+  // covers the conversation area only, never the sidebar or the work rail.
+  const rootRef = useRef<HTMLDivElement | null>(null)
 
   // The image loads on first expansion (user request): the folded card stays
   // as-is and no bytes move until the person opens the body. One fetch per
@@ -196,6 +199,7 @@ export function ToolRowView({ node }: { node: ToolNode }) {
 
   return (
     <div
+      ref={rootRef}
       className={css.root}
       data-state={node.state}
       data-tool={node.name}
@@ -275,7 +279,7 @@ export function ToolRowView({ node }: { node: ToolNode }) {
                 <button
                   type="button"
                   className={css.imageButton}
-                  onClick={() => setZoomed(true)}
+                  onClick={() => setZoomPane(rootRef.current?.closest<HTMLElement>('[data-chat-pane]') ?? null)}
                   aria-label={t('tool.zoomImage')}
                 >
                   <img className={css.imagePreview} src={image.data_url} alt={target.path} />
@@ -328,8 +332,13 @@ export function ToolRowView({ node }: { node: ToolNode }) {
           )}
         </div>
       )}
-      {zoomed && target !== null && image !== null && image.kind === 'image' && (
-        <ImageLightbox src={image.data_url} alt={target.path} onClose={() => setZoomed(false)} />
+      {zoomPane !== null && target !== null && image !== null && image.kind === 'image' && (
+        <ImageLightbox
+          src={image.data_url}
+          alt={target.path}
+          mount={zoomPane}
+          onClose={() => setZoomPane(null)}
+        />
       )}
     </div>
   )
