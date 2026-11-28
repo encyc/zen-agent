@@ -3,6 +3,21 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
+## Unreleased
+
+### Fixed
+
+- **Subagents no longer fail on a gateway that routes by session id.** The
+  `task` tool built its child agent without a session id, so every child
+  request went out without the `x-opencode-session` header and `opencode-go`
+  answered it with a 400 while the conversation itself kept working — any
+  subagent through that gateway, even without a model override. Each dispatch
+  now resolves the child's own session id from its (possibly overridden) model
+  and freezes it alongside the model: a child never borrows the parent's
+  session, and an override to another provider gets that provider's policy.
+  The `model` parameter description also stops advertising the bare ids the
+  strict resolver refuses, which had the agent burning turns on guesses.
+
 ## v0.15.6 — 2026-11-27
 
 ### Added
