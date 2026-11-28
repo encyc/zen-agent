@@ -249,6 +249,74 @@ test('the ask card folds to one status row and unfolds again', async ({ page }) 
   await page.getByRole('button', { name: '展开提问' }).click()
   await expect(card.getByText('用哪个数据库？').first()).toBeVisible()
 })
+test('the ask card lives in the transcript and never covers it', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 720 })
+  const transcript = Array.from({ length: 12 }, (_, index) => [
+    { kind: 'user', id: `u${index}`, text: `第 ${index} 轮`, timestamp: index * 2 + 1 },
+    { kind: 'assistant', id: `a${index}`, text: '回复 '.repeat(60), timestamp: index * 2 + 2 },
+  ]).flat()
+  await boot(page, initialState({ transcript }))
+  await emitEvent(page, {
+    type: 'ask_request',
+    request_id: 'q-seat',
+    questions: [
+      {
+        id: 'db',
+        question: '用哪个数据库？',
+        options: [{ label: 'SQLite' }, { label: 'Postgres' }],
+        multi: false,
+      },
+    ],
+  })
+  const card = page.getByTestId('ask-card')
+  await expect(card).toBeVisible()
+  // The card is a transcript row, not a floating layer over it.
+  await expect(page.locator('[data-ask-seat] [data-ask-card]')).toHaveCount(1)
+
+  const overlap = await page.evaluate(() => {
+    const seat = document.querySelector<HTMLElement>('[data-ask-seat]')
+    const rows = document.querySelectorAll<HTMLElement>('[data-minimap-id]')
+    const last = rows[rows.length - 1]
+    if (seat === null || last === undefined) return Number.POSITIVE_INFINITY
+    return last.getBoundingClientRect().bottom - seat.getBoundingClientRect().top
+  })
+  assert.ok(overlap <= 1, `last row overlaps the ask card by ${overlap}px`)
+
+  // Scrolled up, the card leaves the viewport instead of hanging over the reader.
+  await page.locator('[data-chat-scroll]').evaluate((el) => {
+    el.scrollTop = 0
+    el.dispatchEvent(new Event('scroll'))
+  })
+  const visible = await card.evaluate((el) => {
+    const box = el.getBoundingClientRect()
+    return box.bottom > 0 && box.top < window.innerHeight
+  })
+  assert.equal(visible, false)
+})
+
+test('a pending question keeps a way back to the tail from anywhere', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 720 })
+  const transcript = Array.from({ length: 20 }, (_, index) => [
+    { kind: 'user', id: `u${index}`, text: `第 ${index} 轮`, timestamp: index * 2 + 1 },
+    { kind: 'assistant', id: `a${index}`, text: '回复 '.repeat(60), timestamp: index * 2 + 2 },
+  ]).flat()
+  await boot(page, initialState({ transcript }))
+  await emitEvent(page, {
+    type: 'ask_request',
+    request_id: 'q-pill',
+    questions: [{ id: 'go', question: '继续吗？', options: [{ label: '继续' }], multi: false }],
+  })
+  // Scroll away the way a wheel does, so the view's own listener sees it.
+  await page.locator('[data-chat-scroll]').evaluate((el) => {
+    el.scrollTop = 0
+    el.dispatchEvent(new Event('scroll'))
+  })
+  const pill = page.locator('[data-jump]')
+  await expect(pill).toBeVisible()
+  await pill.click()
+  await expect(page.getByTestId('ask-card')).toBeInViewport()
+})
+
 test('composer menus open directly above their own trigger', async ({ page }) => {
   await boot(page, initialState())
   const mode = page.locator('[data-menu-trigger="mode"]')

@@ -147,6 +147,7 @@ export function PaneView({ pane }: { pane: SessionPane }) {
         <ChatView
           chat={pane.chat}
           busy={pane.busy}
+          askCard={isCurrent}
           onLoadOlder={() => panes.loadOlder(pane.path)}
           onRetry={() => void panes.runCommand(pane.path, 'retry', '')}
           emptyState={<div className={css.empty}>{t('panes.empty')}</div>}

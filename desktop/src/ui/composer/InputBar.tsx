@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import clsx from 'clsx'
 import { useAppStore } from '../../state/appStore'
-import { useAskStore, useComposerStore, useSettingsStore, useStatusStore, useCatalogStore, useSkillsStore } from '../../state/stores'
+import { useComposerStore, useSettingsStore, useStatusStore, useCatalogStore, useSkillsStore } from '../../state/stores'
 import { slashEntries } from '../../state/slashMenu'
 import { detectMention, formatMentionInsert, recognizedTokens } from '../../state/mentions'
 import type { IndexedPath } from '../../state/mentions'
@@ -15,7 +15,6 @@ import type { FuzzyMatch } from '../../state/fuzzy'
 import type { FsIndexResult } from '../../rpc/types'
 import { useT } from '../../i18n/locale'
 import { ApprovalPanel } from '../approval/ApprovalPanel'
-import { AskCard } from '../ask/AskCard'
 import { GoalChip } from '../chat/GoalChip'
 import { GoalPanel } from '../chat/GoalPanel'
 import { pickImagePaths } from './pickImages'
@@ -64,7 +63,6 @@ export function InputBar() {
   const skills = useSkillsStore((state) => state.skills)
   const refreshSkills = useAppStore((state) => state.refreshSkills)
   const enterToSend = useSettingsStore((state) => state.enterToSend)
-  const askCount = useAskStore((state) => state.queue.length)
 
   const [menu, setMenu] = useState<MenuState>({ kind: null })
   const [goalOpen, setGoalOpen] = useState(false)
@@ -267,9 +265,10 @@ export function InputBar() {
     <ComposerRoot>
       {/* Always mounted: the panel decides its own visibility so an answered
           request can still play its exit (see ui/presence.ts). Gating the mount
-          here would unmount the card on the same commit that closes it. */}
+          here would unmount the card on the same commit that closes it. The ask
+          card is not here: it rides the transcript (see ChatView) so a question
+          cannot hang over the reading area. */}
       <ApprovalPanel />
-      {askCount > 0 && <AskCard />}
       <PendingDock />
       <ContinuingDock />
       <TodoDock />

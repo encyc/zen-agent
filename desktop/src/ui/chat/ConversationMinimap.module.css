@@ -6,7 +6,7 @@
   position: absolute;
   left: max(8px, calc((100% - var(--ds-chat-content-width)) / 2 - 26px));
   top: 0;
-  bottom: calc(var(--composer-dock-height, 168px) + 16px);
+  bottom: calc(var(--composer-dock-height, 168px) + var(--ask-card-height, 0px) + 16px);
   z-index: 6;
   display: flex;
   width: 26px;

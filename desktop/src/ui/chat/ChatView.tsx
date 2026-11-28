@@ -31,7 +31,8 @@ import {
 } from '../../state/transcriptWindow'
 import { useTranscriptScroll } from './useTranscriptScroll'
 import { useAppStore } from '../../state/appStore'
-import { useProjectStore, useSessionStore, useSettingsStore } from '../../state/stores'
+import { useAskStore, useProjectStore, useSessionStore, useSettingsStore } from '../../state/stores'
+import { pendingForProject } from '../../state/pendingProject'
 import { useT } from '../../i18n/locale'
 import { HomeHero } from '../HomeHero'
 import { pickProjectFolder } from '../sessions/fileDialog'
@@ -42,6 +43,7 @@ import { TurnProcess } from './TurnProcess'
 import { ConversationMinimap } from './ConversationMinimap'
 import { ChatWidthHandles } from './ChatWidthHandles'
 import { NoticeRow, CommandCard, UsageRow } from './AuxRows'
+import { AskCard } from '../ask/AskCard'
 import { RetryRow, FailureRow } from './RetryRow'
 import { ArrowDownIcon } from '../icons'
 import { RunningMark } from '../RunningMark'
@@ -73,6 +75,10 @@ export interface ChatViewProps {
   onRetry?: () => void
   /** Replaces the HomeHero empty state (panes never offer project picking). */
   emptyState?: ReactNode
+  /** Whether this transcript instance hosts the ask card. Only one may: the
+   * queue is global and an untagged request would otherwise render in every
+   * pane. Panes pass it only for the focused one. */
+  askCard?: boolean
 }
 
 export function ChatView(props: ChatViewProps) {
@@ -95,7 +101,16 @@ export function ChatView(props: ChatViewProps) {
   const setChatWidth = useSettingsStore((state) => state.setChatWidth)
   const scrollerRef = useRef<HTMLDivElement | null>(null)
   const tailRef = useRef<HTMLDivElement | null>(null)
+  const rootRef = useRef<HTMLDivElement | null>(null)
+  const askSeatRef = useRef<HTMLDivElement | null>(null)
   const [activeId, setActiveId] = useState<string | null>(null)
+  // Same slot the card itself resolves — AskCard reads the app store's project,
+  // so the pill must not disagree with it about whether a question is pending.
+  const askProject = useAppStore((state) => state.project)
+  const askQueue = useAskStore((state) => state.queue)
+  const askPending =
+    props.askCard !== false &&
+    pendingForProject(askQueue, askProject, currentPath).length > 0
 
   // Mounted history is a trailing window over the loaded nodes (D261 parity):
   // a fast first commit, then the steady-state budget, grown upward on demand.
@@ -289,6 +304,38 @@ export function ChatView(props: ChatViewProps) {
   const liveTurn = turns[turns.length - 1]
   const showRunningRow = busy && (liveTurn === undefined || liveTurn.tools.length === 0)
 
+  const askSeat =
+    props.askCard === false ? null : (
+      <div ref={askSeatRef} className={css.askSeat} data-ask-seat>
+        <AskCard />
+      </div>
+    )
+
+  // The card is a transcript row, so its height is the transcript's bottom
+  // band: the floating pill/minimap/handles must sit above it, and a card that
+  // grows while the reader follows the tail must stay in view. One measurement
+  // serves both (the fade already clears it — see the design doc).
+  useLayoutEffect(() => {
+    const node = askSeatRef.current
+    const root = rootRef.current
+    if (node === null || root === null) return
+    const publish = () => {
+      const height = Math.round(node.getBoundingClientRect().height)
+      root.style.setProperty('--ask-card-height', `${Math.max(0, height)}px`)
+      const scroller = scrollerRef.current
+      if (scroller === null || height === 0) return
+      if (snapRef.current.mode !== 'following') return
+      markProgrammatic()
+      scroller.scrollTop = scroller.scrollHeight
+    }
+    publish()
+    const observer = new ResizeObserver(publish)
+    observer.observe(node)
+    return () => observer.disconnect()
+    // The seat is a different DOM node in the empty and the non-empty branch:
+    // a branch flip swaps the ref without re-running the effect otherwise.
+  }, [markProgrammatic, isEmpty, props.askCard])
+
   const revealEarlier = () => {
     const scroller = scrollerRef.current
     if (scroller === null) return
@@ -305,19 +352,22 @@ export function ChatView(props: ChatViewProps) {
   const earlier = earlierRow(transcriptWindow.bounded, transcriptWindow.hiddenAbove, hasMoreBefore)
 
   return (
-    <div className={css.root}>
+    <div className={css.root} ref={rootRef}>
       <div className={css.scroll} ref={attach} data-chat-scroll>
         {isEmpty ? (
-          <div className={css.emptyHost}>
-            {props.emptyState ?? (
-              <HomeHero
-                projectName={project}
-                recents={recents}
-                onPickFolder={() => void pickAndSwitchProject()}
-                onOpenRecent={(path) => void switchProject(path)}
-              />
-            )}
-          </div>
+          <>
+            <div className={css.emptyHost}>
+              {props.emptyState ?? (
+                <HomeHero
+                  projectName={project}
+                  recents={recents}
+                  onPickFolder={() => void pickAndSwitchProject()}
+                  onOpenRecent={(path) => void switchProject(path)}
+                />
+              )}
+            </div>
+            {askSeat}
+          </>
         ) : (
           <div className={css.flow} data-chat-flow>
             {earlier.visible && (
@@ -342,6 +392,7 @@ export function ChatView(props: ChatViewProps) {
               />
             ))}
             {showRunningRow && <RunningRow />}
+            {askSeat}
           </div>
         )}
         <div ref={tailRef} />
@@ -352,11 +403,12 @@ export function ChatView(props: ChatViewProps) {
       {props.chat === undefined && (
         <ChatWidthHandles width={clampChatWidth(chatWidth)} onChange={setChatWidth} />
       )}
-      {snap.showJump && (
+      {(snap.showJump || askPending) && (
         <button
           type="button"
           className={css.jump}
           data-jump
+          data-ask={askPending || undefined}
           data-unseen={snap.unseen > 0 || undefined}
           onClick={() => {
             const scroller = scrollerRef.current
@@ -364,7 +416,13 @@ export function ChatView(props: ChatViewProps) {
             publish({ mode: 'following', showJump: false, atTop: false, unseen: 0 })
             tailRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' })
           }}
-          aria-label={snap.unseen > 0 ? t('chat.jumpUnseen', { count: snap.unseen }) : 'scroll to bottom'}
+          aria-label={
+            snap.unseen > 0
+              ? t('chat.jumpUnseen', { count: snap.unseen })
+              : askPending
+                ? t('chat.backToQuestion')
+                : 'scroll to bottom'
+          }
         >
           <ArrowDownIcon size={13} />
           {snap.unseen > 0 && (

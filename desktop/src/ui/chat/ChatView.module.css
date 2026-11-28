@@ -4,6 +4,21 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
+  /* The ask card's measured height, published by the view. Zero whenever no
+   * question is pending, so the floating surfaces sit where they always did. */
+  --ask-card-height: 0px;
+}
+
+/* The ask card is a transcript row: it scrolls with the conversation instead
+ * of hanging over it. Empty when no question is pending, so the band it
+ * reserves collapses to nothing. */
+.askSeat {
+  display: flex;
+  justify-content: center;
+}
+
+.askSeat:empty {
+  display: none;
 }
 
 .scroll {
@@ -72,7 +87,9 @@
 .jump {
   position: absolute;
   right: 24px;
-  bottom: calc(var(--composer-dock-height, 168px) + 12px);
+  bottom: calc(
+    var(--composer-dock-height, 168px) + var(--ask-card-height) + 12px
+  );
   display: inline-flex;
   align-items: center;
   justify-content: center;
