@@ -14,6 +14,7 @@ from pathlib import Path
 
 from zenagent import settings
 from zenagent.cli.rpc.errors import failure_frame
+from zenagent.mcp.builtin import BUILTIN_SERVERS, builtin_row, set_builtin_enabled
 from zenagent.mcp.config import load_mcp_layers, remove_mcp_server, save_mcp_server
 from zenagent.skills import (
     MAX_SKILL_BODY_BYTES,
@@ -190,6 +191,54 @@ class SkillsOps:
             )
         return rows
 
+    def _builtin_mcp_rows(self) -> list[dict]:
+        """The builtin servers (definitions pinned by this zen release).
+
+        Separate from ``_mcp_rows`` on purpose: those come from the two
+        ``mcp.json`` layers and carry edit/remove affordances. A builtin row has
+        only one verb — switch it on or off — and no command line crosses the
+        wire, since the user never authored it.
+        """
+        statuses = {}
+        if self.runtime is not None and getattr(self.runtime, "mcp", None) is not None:
+            statuses = {item.name: item for item in self.runtime.mcp.status()}
+        rows = []
+        for name in BUILTIN_SERVERS:
+            row = builtin_row(name)
+            status = statuses.get(name)
+            rows.append(
+                {
+                    "id": row["id"],
+                    "label": row["label"],
+                    "description": row["description"],
+                    "version": row["version"],
+                    "requires_runtime": row["requires_runtime"] or None,
+                    "proxy_tool": row["proxy_tool"],
+                    "enabled": row["enabled"],
+                    "state": status.state if status is not None else "off",
+                    "tools": list(status.tools) if status is not None else [],
+                    "error": status.error if status is not None else None,
+                }
+            )
+        return rows
+
+    def _builtin_mcp_rows_safe(self) -> list[dict]:
+        """Builtin rows never take the page down: a broken pref is "off"."""
+        try:
+            return self._builtin_mcp_rows()
+        except ValueError as exc:
+            logger.warning("builtin mcp rows failed: %s", exc, exc_info=True)
+            return []
+
+    def _builtin_connect_failure(self, target: str) -> str | None:
+        """Why a just-enabled builtin server is not connected, or ``None``."""
+        row = next(
+            (item for item in self._builtin_mcp_rows() if item["id"] == target), None
+        )
+        if row is None or row["state"] == "connected":
+            return None
+        return f"{row['label']} did not connect: {row['error'] or 'unknown error'}"
+
     def _mcp_result(self, request_id) -> dict:
         try:
             servers = self._mcp_rows()
@@ -205,8 +254,74 @@ class SkillsOps:
             "id": request_id,
             "ok": True,
             "servers": servers,
+            "builtin": self._builtin_mcp_rows_safe(),
             "problem": problem,
         }
+
+    async def _mcp_builtin(self, request: dict, request_id) -> None:
+        """Switch one builtin server on/off, then re-apply the runtime.
+
+        Enabling only writes the preference: the actual connection happens when
+        the manager is rebuilt below, so a failing ``npx`` (no Node, no network)
+        reports through the row's ``error`` instead of a half-enabled state. The
+        write is reverted when the rebuild cannot connect, because a switch that
+        says "on" while nothing is connected is a lie the next session repeats.
+        """
+        target = request.get("id")
+        if not isinstance(target, str) or target not in BUILTIN_SERVERS:
+            self._send(
+                {"type": "error", "id": request_id, "message": f"unknown builtin MCP server: {target}"}
+            )
+            return
+        enabled = bool(request.get("enabled"))
+        try:
+            set_builtin_enabled(target, enabled)
+        except (ValueError, OSError) as exc:
+            self._send(
+                failure_frame(
+                    request_id,
+                    code="mcp_failed",
+                    message="mcp failed",
+                    exc=exc,
+                    op="builtin",
+                )
+            )
+            return
+
+        # Both directions re-assemble: disabling must drop the live connection
+        # too, or the row would keep saying "connected" for a server the user
+        # just switched off. ``_apply_or_defer`` lives on the plugin mixin; the
+        # composed host always has it, a bare SkillsOps in a test may not.
+        apply_now = getattr(self, "_apply_or_defer", None)
+        pending = False if apply_now is None else not await apply_now()
+        failure = self._builtin_connect_failure(target) if enabled and not pending else None
+        if failure is not None:
+            # Enabling wrote a preference the runtime could not honour; leaving
+            # it on would make the next session repeat a false claim.
+            set_builtin_enabled(target, False)
+            self._send(
+                {
+                    "type": "result",
+                    "id": request_id,
+                    "ok": True,
+                    "servers": self._mcp_rows(),
+                    "builtin": self._builtin_mcp_rows(),
+                    "problem": failure,
+                    "apply_pending": False,
+                }
+            )
+            return
+        self._send(
+            {
+                "type": "result",
+                "id": request_id,
+                "ok": True,
+                "servers": self._mcp_rows(),
+                "builtin": self._builtin_mcp_rows(),
+                "problem": None,
+                "apply_pending": pending,
+            }
+        )
 
     @staticmethod
     def _mcp_layer(request: dict) -> str:
@@ -234,6 +349,10 @@ class SkillsOps:
         op = request.get("op")
         if op == "list":
             self._send(self._mcp_result(request_id))
+            return
+
+        if op == "builtin":
+            await self._mcp_builtin(request, request_id)
             return
 
         name = request.get("name")

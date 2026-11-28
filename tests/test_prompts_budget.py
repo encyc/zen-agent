@@ -6,6 +6,7 @@ from pathlib import Path
 
 from prompt_fixtures import CONFIGS, CWD, golden_tools
 
+from zenagent.mcp.builtin import COMPUTE_USE_VERSION
 from zenagent.prompts import BLOCKS, PromptContext, compose_system
 from zenagent.prompts.registry import read_block
 from zenagent.prompts.spec import (
@@ -15,6 +16,7 @@ from zenagent.prompts.spec import (
     TOTAL_BUDGET_CHARS,
 )
 from zenagent.skills import build_skill_tool, format_skill_entries
+from zenagent.tools.desktop import build_desktop_tool
 from zenagent.tools.sessions import build_session_tools
 from zenagent.tools.task import build_task_tool
 from zenagent.tools.todo import build_todo_tool
@@ -33,6 +35,7 @@ def test_tool_budgets_hold() -> None:
     tools.append(build_task_tool(model=None, base_tools=[]))
     tools.append(build_skill_tool([]))
     tools.extend(build_session_tools(Path("/repo")))
+    tools.append(build_desktop_tool(lambda: None, version=COMPUTE_USE_VERSION))
     total = 0
     for tool in tools:
         assert len(tool.description) <= TOOL_BUDGET_CHARS, tool.name

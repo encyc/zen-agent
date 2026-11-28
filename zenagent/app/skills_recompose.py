@@ -16,6 +16,7 @@ from zenagent.agent.memory_store import MemoryStore
 from zenagent.app.rewind import build_checkpoint_tools
 from zenagent.extensions import load_extensions
 from zenagent.i18n import t
+from zenagent.mcp.builtin import BUILTIN_SERVERS
 from zenagent.skills import (
     build_skill_tool,
     default_skill_roots,
@@ -24,6 +25,7 @@ from zenagent.skills import (
 )
 from zenagent.templates import default_template_roots, discover_templates
 from zenagent.tools import base_tools
+from zenagent.tools.desktop import build_desktop_tool
 from zenagent.tools.github import build_github_tool
 from zenagent.tools.lsp import build_lsp_tool
 from zenagent.tools.memory import build_memory_tool, build_memory_write_tool
@@ -80,6 +82,43 @@ def change_note(label: str, before: list, after: list) -> str:
     return note
 
 
+def _fold_builtin_servers(runtime: Runtime, mcp_tools: list) -> tuple[list, list[str]]:
+    """Fold a builtin server's raw tools behind its proxy tool.
+
+    ``agent-desktop`` alone contributes 75 tools and ~44 KB of schema, and none
+    of them declares ``readOnlyHint``. Exposing them directly would cost every
+    request a large prompt slice while still needing one approval per click, so
+    a connected builtin server with a ``proxy_tool`` gets that one tool instead
+    and its raw tools stay out of the desired set -- unless the user asked for
+    them this session (``/desktop raw on``), which is the escape hatch for a
+    case the proxy's action list does not cover.
+
+    Returns ``(tools to keep, raw tool names withheld)``.
+    """
+    raw_mode = bool(getattr(runtime, "desktop_raw", False))
+    # A stand-in manager in a test may only implement ``tool_defs``; folding is
+    # an optimisation, never a reason to fail a rebuild.
+    connected = getattr(runtime.mcp, "connected_names", [])
+    withheld: list[str] = []
+    for name, server in BUILTIN_SERVERS.items():
+        if server.proxy_tool is None or name not in connected:
+            continue
+        # ``tool_name_for`` keeps ``-`` (only [^A-Za-z0-9_-] is replaced).
+        prefix = f"mcp__{name}__"
+        own = [tool for tool in mcp_tools if tool.name.startswith(prefix)]
+        if own and not raw_mode:
+            owner = {tool.name for tool in own}
+            mcp_tools = [tool for tool in mcp_tools if tool.name not in owner]
+            withheld.extend(sorted(owner))
+        mcp_tools = [
+            *mcp_tools,
+            build_desktop_tool(
+                lambda: runtime.mcp, server=name, version=server.version
+            ),
+        ]
+    return mcp_tools, withheld
+
+
 def recompose(runtime: Runtime) -> None:
     """Rebuild the tool list and prompt from the current discovery results.
 
@@ -126,7 +165,10 @@ def recompose(runtime: Runtime) -> None:
     if runtime.task_tool is not None:
         tools.append(runtime.task_tool)
     if runtime.mcp is not None:
-        tools.extend(runtime.mcp.tool_defs())
+        mcp_tools = runtime.mcp.tool_defs()
+        mcp_tools, folded = _fold_builtin_servers(runtime, mcp_tools)
+        runtime._builtin_hidden_tools = folded
+        tools.extend(mcp_tools)
     if runtime.skills:
         tools.append(
             build_skill_tool(

@@ -86,6 +86,12 @@ class AgentTool:
     #: Exposed only after the user activates it (settings or a frontend
     #: toggle); the registry starts it out of the active set.
     default_inactive: bool = False
+    #: Argument values that downgrade a ``write``/``exec`` tool to read-only.
+    #: Naming the field (``"action"``) keeps a proxy tool honest: ``desktop``
+    #: declares ``write`` because it can click, but ``action=snapshot`` only
+    #: reads the accessibility tree and must never prompt.
+    read_only_arg: str = ""
+    read_only_values: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

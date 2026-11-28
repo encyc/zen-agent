@@ -28,10 +28,74 @@ ZenAgent 手写实现 MCP 客户端（不依赖官方 SDK），支持 **stdio** 
 ```
 
 - `command` 与 `url` 二选一，类型必须正确，否则启动即报错（错误信息带文件路径）。
+- **内置 server 是第三层（最低优先级）**，见下节。
 - 项目层随仓库提交：**不要放 token/密钥**。需要 header 凭据的 server 把整条定义放全局
   `~/.zenagent/mcp.json`（不提交），或用 stdio server 的环境变量读取；项目层只覆盖 command/url
   等可共享部分。
 - CLI 过滤：`--mcp-server files`（可重复）、`--mcp-file PATH`、`--no-mcp`。
+
+## 内置 server（Computer Use）
+
+有些 server 的定义属于 **zen 版本**，不属于用户的 `mcp.json`：零凭据、不需要逐项目 trust、
+不需要安装目录，而版本必须跟着 zen 一起走。这类 server 写在代码里
+（`zenagent/mcp/builtin.py`），开关写在 `settings.json` 的 `prefs.builtin_mcp`，**永远不写 `mcp.json`**。
+
+| | |
+|---|---|
+| id | `compute-use` |
+| label | Computer Use |
+| 上游 | `agent-desktop`（npm，Vercel Labs）经 `agent-desktop mcp` 提供 stdio MCP |
+| 版本 | 由 `COMPUTE_USE_VERSION` 常量锁死；zen 发版前实测通过才升 |
+| 运行依赖 | Node.js 18+（`npx -y agent-desktop@<pin> mcp`）与系统无障碍授权 |
+
+合并顺序是 **内置 → 全局层 → 项目层**：任意一层出现同名 server 就覆盖内置那份，这是
+「我想用自己的 agent-desktop 命令行」的逃生门。`--mcp-file` 只读那一个文件，**不叠加**内置层。
+
+为什么不做成插件：插件（`zenagent/plugins/`）解决的是「要凭据 + 要附带 skill + 要装卸状态」的第三方
+连接器，装完的 server 名会变成 `<plugin id>.<key>`，而且不出现在 MCP 设置页。Computer Use 三样都不需要。
+
+### 只暴露一个工具
+
+`agent-desktop` 在 MCP 侧有 **75 个工具、合计约 44 KB 的 inputSchema**，且**没有任何一个声明
+`readOnlyHint`**。原样挂上去，每轮请求都要付这份 schema，而每个 click 仍然会要一次确认。
+所以 zen 把它折叠成一个工具 `desktop`：
+
+- `action=` 分发到上游工具（`desktop_<action>`），参数用上游原名（`ref`/`text`/`app`/`value`/`combo`…），
+  只放行本工具声明过的键，模型塞不进未公开的 flag。
+- 只读 action（`snapshot`/`find`/`get`/`is`/`screenshot`/`status`/`permissions`/`list_apps`/
+  `list_windows`/`help`）在权限门上**按参数降级为 read**：plan 模式、`--read-only` 下照常可用，
+  snapshot 不弹确认。其余 action 是 `write`，走正常审批。
+- `action=help` 返回二进制内置的、与该版本严格一致的 agent 指南（按 server 版本缓存一次）。
+- 需要在会话里用原始 75 个工具时：`/desktop raw on`（会话级，不写盘；代价是每轮多付 44 KB schema）。
+  `off` 收回。
+
+### 怎么开、怎么看
+
+- 桌面端 **Settings → MCP → 内置**：一张 Computer Use 卡片（label、id、被锁的版本、运行依赖）。
+  「安装并启用」= 写开关 + 就地重装配 + 用 `probe_mcp_server` 拉一次 `tools/list`（顺带把 32 MB 的
+  npx 首装跑完）。连不上就回滚开关并显示上游给的原因，不留下「开关说有、实际没连」的假状态。
+- CLI：`zen mcp enable compute-use` / `zen mcp disable compute-use`；`zen mcp` 的列表里带一行
+  `builtin: compute-use (Computer Use 1.3.1) — off`。CLI 只写开关，**下次会话生效**（headless 没有
+  runtime 可重装配）。
+- 斜杠命令：`/desktop`（状态）、`/desktop on|off`、`/desktop raw on|off`；`/mcp` 的输出里带一行内置状态。
+
+### 权限与边界
+
+真正的边界是 **操作系统的无障碍授权**（macOS：系统设置 → 隐私与安全性 → 无障碍，授予**启动 zen 的
+那个 app**），不是 zen 的审批。zen 侧只做两件事：`write` 档工具的常规审批，以及 `--read-only`/plan
+模式下拒绝动作类 action。
+
+**启用即意味着无人值守任务也会用它**：automation 跑在 `auto` 模式，不弹确认。这一点在设置页的按钮
+下方就写着，而不只是文档里。
+
+敏感数据：snapshot、剪贴板、截图都可能带出桌面私密内容，别写进公开日志或上传。
+
+### 发版时升版本
+
+1. `npx -y agent-desktop@<new> mcp` 手工握手，确认工具数与 `desktop_*` 名字没变。
+2. 真机冒烟代理映射（Finder：snapshot → click → wait）。
+3. 改 `zenagent/mcp/builtin.py` 的 `COMPUTE_USE_VERSION` 一个常量，CHANGELOG 加一行。
+4. `bash scripts/check.sh` → `bash scripts/release-check.sh`。
 
 ## 工具怎么出现
 
@@ -42,6 +106,8 @@ ZenAgent 手写实现 MCP 客户端（不依赖官方 SDK），支持 **stdio** 
   例外：服务器在工具 `annotations.readOnlyHint` 里声明只读时，按 `read` 档处理
   （plan / `--read-only` 放行、免确认）。`readOnlyHint` 是**服务器自述**，不是本地保证。
 - 与内置工具重名不会冲突（命名空间隔离），内置优先。
+- **声明了 `proxy_tool` 的内置 server 会被折叠**：连上之后只有那一个代理工具进工具列表，
+  上游的 `mcp__<server>__*` 全部不暴露（`/desktop raw on` 例外）。
 
 ## 启动失败不是终点（重点）
 

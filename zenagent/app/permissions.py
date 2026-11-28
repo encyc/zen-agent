@@ -168,16 +168,35 @@ def expects_target(tool_name: str) -> bool:
     return tool_name in _PATH_TARGET_TOOLS or tool_name == "bash"
 
 
-def tool_is_read_only(tool_name: str, tool=None) -> bool:
+def tool_is_read_only(tool_name: str, tool=None, args: dict | None = None) -> bool:
     """Whether a call only reads state and never needs confirmation.
 
-    A tool's own ``approval`` declaration wins; the ``READ_ONLY_TOOLS`` name
-    set is only the fallback for callers that don't pass the tool object
-    (direct ``check(name, args)`` calls and tests).
+    Precedence, top to bottom:
+
+    1. ``approval == "read"`` — the tool can never write.
+    2. A declared ``read_only_arg`` whose value is in ``read_only_values``: a
+       proxy tool (``desktop``) is one declaration that can read *or* click, so
+       the declaration names the argument that decides, per call.
+    3. The ``READ_ONLY_TOOLS`` name set, the fallback for callers that only have
+       a name (direct ``check(name, args)`` calls and tests).
+
+    ``args`` is optional because most call sites judge the tool, not the call;
+    without it a conditional tool is treated as its declared tier.
     """
     approval = getattr(tool, "approval", None)
+    if approval is not None and approval == "read":
+        return True
+    field = getattr(tool, "read_only_arg", "")
+    values = getattr(tool, "read_only_values", ())
+    if (
+        field
+        and values
+        and isinstance(args, dict)
+        and str(args.get(field) or "").strip() in values
+    ):
+        return True
     if approval is not None:
-        return approval == "read"
+        return False
     return tool_name in READ_ONLY_TOOLS
 
 
@@ -319,7 +338,7 @@ class PermissionGate:
         The order is the design's fixed precedence: catastrophic command, deny
         pattern, plan/read-only policy, then the new risk tiers, then allow.
         """
-        read_only = tool_is_read_only(tool_name, tool)
+        read_only = tool_is_read_only(tool_name, tool, args)
         if tool_name == "bash" and not self.allow_dangerous:
             # --yes means "don't ask me", not "run anything": catastrophic
             # commands need the explicit --allow-dangerous escape hatch.
@@ -423,7 +442,7 @@ class PermissionGate:
             return False, f"{verdict.reason}; {hint}" if hint else verdict.reason
         if matches_any(self.allow, tool_name) is not None:
             return True, ""
-        if tool_is_read_only(tool_name, tool):
+        if tool_is_read_only(tool_name, tool, args):
             return True, ""
         if target_is_granted(tool_name, args, self._always_allowed):
             return True, ""
@@ -621,7 +640,7 @@ class PermissionBroker:
             return {"block": True, "reason": f"denied by user: {name}"}
         if target is not None and target_is_granted(name, arguments, self._allowed_targets):
             return None
-        if tool_is_read_only(name, tool) or name in self._allowed:
+        if tool_is_read_only(name, tool, arguments) or name in self._allowed:
             return None
         if matches_any(self._gate.allow, name) is not None:
             return None

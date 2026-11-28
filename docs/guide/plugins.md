@@ -15,6 +15,10 @@
 也不会回调 zen；`zenagent/plugins/` 不 import `mcp` / `app` / `cli` / `agent` / `tools` / `providers`，
 只有 `zenagent/app/plugin_wiring.py` 把插件贡献翻译成 MCP 配置（`tests/test_plugin_layering.py` 钉住）。
 
+> **Computer Use 不是插件。** 它零凭据、不带 skill、不装卸，版本由 zen 自己锁死，因此是一个
+> **内置 MCP server**（`zenagent/mcp/builtin.py`，开关在 `settings.json`，UI 在 Settings → MCP）。
+> 判断标准：需要 zen 替它管凭据或管安装目录 → 插件；否则 → 内置 server。见 [MCP](mcp.md#内置-servercomputer-use)。
+
 插件贡献的 MCP server 命名为 `<plugin-id>.<server-key>`（如 `zen.feishu.feishu`），
 工具照常暴露为 `mcp__<server>__<tool>`。插件也可以贡献 skills（并入技能根）和一个 Python 扩展文件。
 

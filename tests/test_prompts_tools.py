@@ -11,8 +11,10 @@ from pathlib import Path
 
 from prompt_fixtures import SKILLS, TOOL_GOLDEN_NAMES, golden_tools
 
+from zenagent.mcp.builtin import COMPUTE_USE_VERSION
 from zenagent.prompts import BLOCKS, TOOL_BLOCK_NAMES, tool_description
 from zenagent.skills import build_skill_tool
+from zenagent.tools.desktop import build_desktop_tool
 from zenagent.tools.sessions import build_session_tools
 from zenagent.tools.task import build_task_tool
 from zenagent.tools.todo import build_todo_tool
@@ -49,6 +51,7 @@ def test_tool_descriptions_match_golden() -> None:
     tools.append(build_task_tool(model=None, base_tools=[]))
     tools.append(build_skill_tool(list(SKILLS)))
     tools.extend(build_session_tools(Path("/repo")))
+    tools.append(build_desktop_tool(lambda: None, version=COMPUTE_USE_VERSION))
     for tool in tools:
         assert tool.description == golden[tool.name]["text"], tool.name
 

@@ -416,6 +416,20 @@ export interface McpServerRow {
   error: string | null
 }
 
+/** One builtin MCP server; its definition is pinned by the zen release. */
+export interface BuiltinMcpRow {
+  id: string
+  label: string
+  description: string
+  version: string
+  requires_runtime: string | null
+  proxy_tool: string | null
+  enabled: boolean
+  state: 'connected' | 'failed' | 'off'
+  tools: Array<string>
+  error: string | null
+}
+
 /** One credential spec of a plugin. */
 export interface PluginCredentialRow {
   key: string
@@ -1125,6 +1139,7 @@ export interface McpListResult {
   id: string
   ok: true
   servers: Array<McpServerRow>
+  builtin: Array<BuiltinMcpRow>
   problem: string | null
 }
 
@@ -1176,11 +1191,28 @@ export interface McpTestResult {
   message: string
 }
 
+export interface McpBuiltinRequest {
+  op: string
+  id: string
+  enabled: boolean
+}
+
+export interface McpBuiltinResult {
+  type: 'result'
+  id: string
+  ok: true
+  servers: Array<McpServerRow>
+  builtin: Array<BuiltinMcpRow>
+  problem: string | null
+  apply_pending: boolean
+}
+
 export type McpRequest =
   | McpListRequest
   | McpAddRequest
   | McpRemoveRequest
   | McpTestRequest
+  | McpBuiltinRequest
 
 
 // ---- project (sub-op family) ---------------------------------------------

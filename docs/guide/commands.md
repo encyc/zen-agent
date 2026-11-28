@@ -79,6 +79,7 @@ TUI 与 REPL **共用同一个** `CommandRegistry`（`zenagent/app/commands.py`�
 | `/skills` | 列出发现的 skills（会重新扫描目录） |
 | `/reload` | 重新发现 skills、模板与扩展，当场生效 |
 | `/mcp` | 重连 MCP server 并刷新工具 |
+| `/desktop` | Computer Use：`status` 看状态、`on`/`off` 启停内置 server、`raw on`/`off` 在会话内展开 75 个原始工具 |
 | `/usage` | 本会话的 token 与花费总计 |
 | `/context` | 上下文窗口占用情况 |
 | `/todo` | 查看 todo 列表：TUI 打开可编辑浮层（与模型 `todo` 工具共用 `<session>.todo.json`），REPL 打印只读文本 |

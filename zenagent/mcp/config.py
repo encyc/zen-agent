@@ -24,6 +24,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from zenagent import project
+from zenagent.mcp.builtin import builtin_configs
 from zenagent.mcp.client import HttpTransport, StdioTransport, Transport
 from zenagent.project import project_dir
 
@@ -116,15 +117,18 @@ def _load_mcp_file(target: Path) -> dict[str, McpServerConfig]:
 def load_mcp_config(
     path: Path | None = None, *, cwd: Path | None = None
 ) -> dict[str, McpServerConfig]:
-    """Load configured servers, global layer first, then the project layer.
+    """Load configured servers: builtins, then global, then the project layer.
 
-    An explicit ``path`` disables layering and reads just that file. Otherwise
-    the project file's same-named server replaces the global definition and any
-    other global servers remain.
+    An explicit ``path`` disables layering and reads just that file (and no
+    builtins -- ``--mcp-file`` means "exactly this"). Otherwise a builtin server
+    the user switched on is the lowest layer, so a same-named server in either
+    ``mcp.json`` still wins: that is the escape hatch for someone who wants
+    their own ``agent-desktop`` command line.
     """
     if path is not None:
         return _load_mcp_file(Path(path))
-    servers = _load_mcp_file(config_path())
+    servers = builtin_configs()
+    servers.update(_load_mcp_file(config_path()))
     servers.update(_load_mcp_file(project.project_mcp_path(cwd)))
     return servers
 
@@ -287,20 +291,21 @@ def untrusted_project_servers(*, cwd: Path | None = None) -> list[str]:
 def withhold_untrusted_project_servers(
     servers: dict[str, McpServerConfig], *, cwd: Path | None = None
 ) -> tuple[dict[str, McpServerConfig], list[str]]:
-    """Drop untrusted project stdio servers; restore a global one they overrode.
+    """Drop untrusted project stdio servers; restore the layer they overrode.
 
     The project layer wins the merge, so a same-named untrusted override must
-    not take the user's own global definition down with it.
+    not take the user's own global definition — or an enabled builtin — down
+    with it.
     """
     untrusted = untrusted_project_servers(cwd=cwd)
     if not untrusted:
         return servers, []
-    global_only = _load_mcp_file(config_path())
+    fallback = {**builtin_configs(), **_load_mcp_file(config_path())}
     kept = dict(servers)
     for name in untrusted:
         kept.pop(name, None)
-        if name in global_only:
-            kept[name] = global_only[name]
+        if name in fallback:
+            kept[name] = fallback[name]
     return kept, untrusted
 
 

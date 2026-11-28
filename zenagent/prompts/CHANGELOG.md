@@ -4,6 +4,23 @@ Every content change bumps `PROMPT_VERSION` (`zenagent/prompts/spec.py`) and get
 one entry here: what changed, why, and the experiment/report that justified it.
 P0 extracted the v0.4.1 text verbatim — no behavior change.
 
+## 2026-11-28.1 — Computer Use enters the roster
+
+- One block is new: `tool.desktop` (889 chars, budget 900). It documents the
+  single proxy tool that folds `agent-desktop`'s 75 MCP tools behind one
+  `action=` surface.
+- Why a proxy instead of the raw tools: the upstream server publishes ~44 KB of
+  inputSchema (6× every builtin tool this agent ships, combined) and declares no
+  `readOnlyHint` on any of them, so exposing them directly would cost every
+  request a large prompt slice while still prompting once per click.
+- The pinned upstream version is rendered into the first line
+  (`agent-desktop {{version}}`, from `COMPUTE_USE_VERSION`): the guide behind
+  `action=help` and the action set itself move with that pin, so the model is
+  told which behavior set it has. A bump changes this block, which is honest —
+  the zen release that bumps it bumps `PROMPT_VERSION` anyway.
+- Tool budget impact: total description chars 6406 → 7295 of 20000; the new
+  tool's schema is 1501 bytes.
+
 ## 2026-11-26.3 — a new session names itself
 
 - Two blocks are new: `title.system` (134 chars) and `title.user` (31 chars) —

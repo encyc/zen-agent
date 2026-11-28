@@ -274,7 +274,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "command",
         nargs="?",
-        help="optional subcommand: doctor, sessions, mcp",
+        help="optional subcommand: doctor, sessions, mcp, usage, export",
     )
     parser.add_argument(
         "-V",
@@ -290,7 +290,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "mcp_server",
         nargs="?",
-        help="server name for: mcp trust <name>",
+        help="server name for: mcp trust <name> | mcp enable|disable <builtin>",
     )
     parser.add_argument(
         "--format", choices=("md", "html"), default="md", help="export format (default md)"

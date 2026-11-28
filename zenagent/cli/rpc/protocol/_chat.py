@@ -219,6 +219,13 @@ class McpLayerRequest(WireRequest):
     }
 
 
+class McpBuiltinRequest(WireRequest):
+    FIELDS: ClassVar[dict[str, Field]] = {
+        "id": Field(STRING, required=True),
+        "enabled": Field(BOOL, required=True),
+    }
+
+
 class McpTestRequest(WireRequest):
     FIELDS: ClassVar[dict[str, Field]] = {
         "name": Field(STRING, required=True),
@@ -459,6 +466,7 @@ OPS: dict[str, OpSpec] = {
     "mcp": OpSpec("mcp", NoFields, {}, subs={
 "list": OpSpec("mcp", NoFields, {
     "servers": Field(list_of(ref("McpServerRow"))),
+    "builtin": Field(list_of(ref("BuiltinMcpRow"))),
     "problem": Field(STRING, nullable=True),
 }),
 "add": OpSpec("mcp", McpAddRequest, {
@@ -473,6 +481,12 @@ OPS: dict[str, OpSpec] = {
     "connected": Field(BOOL),
     "tools": Field(list_of(STRING)),
     "message": Field(STRING),
+}),
+"builtin": OpSpec("mcp", McpBuiltinRequest, {
+    "servers": Field(list_of(ref("McpServerRow"))),
+    "builtin": Field(list_of(ref("BuiltinMcpRow"))),
+    "problem": Field(STRING, nullable=True),
+    "apply_pending": Field(BOOL),
 }),
     }),
     "project": OpSpec("project", NoFields, {}, subs={

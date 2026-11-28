@@ -8,8 +8,8 @@ import { useAppStore, type McpLayer, type McpServerInput } from '../../state/app
 import { useMcpStore } from '../../state/stores'
 import { useLocale, useT } from '../../i18n/locale'
 import { frameErrorNotice } from '../../rpc/frames'
-import type { McpServerRow } from '../../rpc/types'
-import { PlusIcon, RefreshIcon } from '../icons'
+import type { BuiltinMcpRow, McpServerRow } from '../../rpc/types'
+import { CheckIcon, PlusIcon, RefreshIcon, WarningIcon } from '../icons'
 import css from './McpSettings.module.css'
 
 type Feedback =
@@ -168,6 +168,114 @@ function McpRow({ row }: { row: McpServerRow }) {
       ) : null}
       {error ? <div className={css.error}>{error}</div> : null}
     </div>
+  )
+}
+
+/** One builtin server: a definition zen ships, a switch the user owns.
+ *
+ * Deliberately not an editable row — there is no command line to edit and no
+ * layer to choose. Enabling it may install 32 MB through npx, so the button
+ * reports progress and the server's own error rather than pretending a switch
+ * flip always succeeds. */
+function BuiltinCard({ row }: { row: BuiltinMcpRow }) {
+  const t = useT()
+  const locale = useLocale()
+  const setBuiltinMcp = useAppStore((state) => state.setBuiltinMcp)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  async function flip(enabled: boolean) {
+    if (busy) return
+    setBusy(true)
+    setError('')
+    try {
+      const frame = await setBuiltinMcp(row.id, enabled)
+      if (frame.type === 'result' && frame.ok) {
+        const message = messageOf(frame.problem)
+        if (message !== '') setError(message)
+      } else {
+        setError(
+          frameErrorNotice(frame, locale) ??
+            (messageOf(frame.message) || t('settings.builtinToggleFailed')),
+        )
+      }
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const stateKey =
+    row.state === 'connected'
+      ? 'settings.builtinStateConnected'
+      : row.state === 'failed'
+        ? 'settings.builtinStateFailed'
+        : 'settings.builtinStateOff'
+
+  return (
+    <article className={css.builtin} data-builtin={row.id} data-state={row.state}>
+      <div className={css.builtinHead}>
+        <span className={css.builtinLabel}>{row.label}</span>
+        <span className={css.builtinId}>{row.id}</span>
+        <span className={css.builtinVersion}>
+          {t('settings.builtinVersion', { version: row.version })}
+        </span>
+        <span
+          className={clsx(
+            css.state,
+            row.state === 'connected' && css.stateOn,
+            row.state === 'failed' && css.stateError,
+          )}
+        >
+          {t(stateKey)}
+        </span>
+      </div>
+      <p className={css.builtinDescription}>{row.description}</p>
+      <div className={css.builtinMeta}>
+        {row.requires_runtime ? (
+          <span className={css.builtinHint}>
+            {t('settings.builtinRequires', { runtime: row.requires_runtime })}
+          </span>
+        ) : null}
+        {row.enabled && row.state === 'connected' ? (
+          <span className={css.builtinHint}>
+            {t('settings.builtinFolded', {
+              count: row.tools.length,
+              tool: row.proxy_tool ?? '',
+            })}
+          </span>
+        ) : null}
+      </div>
+      {row.enabled ? (
+        <p className={css.builtinWarning}>{t('settings.builtinUnattended')}</p>
+      ) : null}
+      {row.error ? <div className={css.error}>{row.error}</div> : null}
+      {error !== '' ? <div className={css.error}>{error}</div> : null}
+      <div className={css.builtinActions}>
+        {row.enabled ? (
+          <button
+            type="button"
+            className={clsx(css.action, css.actionDanger)}
+            disabled={busy}
+            onClick={() => void flip(false)}
+          >
+            {busy ? t('settings.builtinWorking') : t('settings.builtinDisable')}
+          </button>
+        ) : (
+          <button
+            type="button"
+            className={css.primary}
+            disabled={busy}
+            onClick={() => void flip(true)}
+          >
+            {busy ? t('settings.builtinInstalling') : t('settings.builtinEnable')}
+          </button>
+        )}
+        {row.state === 'connected' ? <CheckIcon size={12} /> : null}
+        {row.state === 'failed' ? <WarningIcon size={12} /> : null}
+      </div>
+    </article>
   )
 }
 
@@ -354,6 +462,7 @@ function AddServer({ onDone }: { onDone(): void }) {
 export function McpSettings() {
   const t = useT()
   const servers = useMcpStore((state) => state.servers)
+  const builtin = useMcpStore((state) => state.builtin)
   const problem = useMcpStore((state) => state.problem)
   const refreshMcp = useAppStore((state) => state.refreshMcp)
   const [adding, setAdding] = useState(false)
@@ -395,6 +504,22 @@ export function McpSettings() {
 
         {problem !== null ? (
           <div className={css.problem}>{t('settings.mcpProblem', { message: problem })}</div>
+        ) : null}
+
+        {builtin.length > 0 ? (
+          <section className={css.builtinSection} data-builtin-section>
+            <div className={css.cardHeadline}>
+              <div className={css.headCopy}>
+                <h3 className={css.cardHeading}>{t('settings.builtinSection')}</h3>
+                <p className={css.cardCaption}>{t('settings.builtinSectionCaption')}</p>
+              </div>
+            </div>
+            <div className={css.builtinList}>
+              {builtin.map((row) => (
+                <BuiltinCard key={row.id} row={row} />
+              ))}
+            </div>
+          </section>
         ) : null}
 
         {adding ? <AddServer onDone={() => setAdding(false)} /> : null}

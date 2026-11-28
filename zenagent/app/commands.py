@@ -11,6 +11,7 @@ from zenagent.agent.session import session_title
 from zenagent.app import clipboard
 from zenagent.app.appearance import THEME_CHOICES
 from zenagent.app.chat import ChatController
+from zenagent.app.desktop_commands import desktop_command, desktop_mcp_line
 from zenagent.app.goal_commands import run_goal_command
 from zenagent.app.links import extract_links, parse_index
 from zenagent.app.models import ModelManager
@@ -297,9 +298,16 @@ async def _mcp(services: AppServices, argument: str) -> CommandResult:
             return CommandResult(message=str(exc))
     connected = ", ".join(manager.connected_names) or "(none)"
     suffix = " · tools not refreshed while the agent is working" if streaming else ""
-    return CommandResult(
-        message=t("cmdmsg.mcp_connected", connected=connected, suffix=suffix)
-    )
+    lines = [t("cmdmsg.mcp_connected", connected=connected, suffix=suffix)]
+    builtin_line = desktop_mcp_line(services.runtime)
+    if builtin_line is not None:
+        lines.append(builtin_line)
+    return CommandResult(message="\n".join(lines))
+
+
+def _desktop(services: AppServices):
+    """``/desktop`` — the body lives in ``desktop_commands`` (budget reasons)."""
+    return _command("desktop")(desktop_command)(services)
 
 
 @_command("skills")
@@ -862,6 +870,7 @@ def build_default_commands(services: AppServices) -> CommandRegistry:
         _image,
         _images,
         _mcp,
+        _desktop,
         _skills,
         _reload,
         _export,

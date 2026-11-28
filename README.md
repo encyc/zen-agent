@@ -102,7 +102,7 @@ in an evening, embed in an afternoon, and change without permission.
 | **A small kernel** | Six layers whose dependencies point strictly down; each layer is replaceable on its own | [architecture](https://github.com/encyc/zen-agent/blob/main/docs/architecture.md) |
 | **Four surfaces** | TUI (transcript, tool cards, sidebar), REPL, headless one-shot, RPC/SDK | [CLI](https://github.com/encyc/zen-agent/blob/main/docs/guide/cli.md) · [TUI](https://github.com/encyc/zen-agent/blob/main/docs/guide/tui.md) |
 | **Built-in tools** | files, bash with background jobs, grep/glob, web search + fetch, child agents, task list, project memory, LSP, GitHub (when `gh` is installed), checkpoint/rewind, cross-session search | [tools](https://github.com/encyc/zen-agent/blob/main/docs/guide/tools-permissions.md) |
-| **54 commands** | one slash-command surface shared by the TUI and the REPL, with Tab completion | [commands](https://github.com/encyc/zen-agent/blob/main/docs/guide/commands.md) |
+| **55 commands** | one slash-command surface shared by the TUI and the REPL, with Tab completion | [commands](https://github.com/encyc/zen-agent/blob/main/docs/guide/commands.md) |
 | **Extend it** | skills, templates, extensions, MCP servers, custom providers — all file-driven | [extensions](https://github.com/encyc/zen-agent/blob/main/docs/guide/extensions.md) · [MCP](https://github.com/encyc/zen-agent/blob/main/docs/guide/mcp.md) |
 | **Automations** | a per-project daemon runs one round on a schedule; definitions are plain files the CLI and desktop share | [automations](https://github.com/encyc/zen-agent/blob/main/docs/guide/automations.md) |
 | **Embed it** | `Agent` + `subscribe` in Python; `zen rpc` for every other language | [RPC & SDK](https://github.com/encyc/zen-agent/blob/main/docs/guide/rpc-sdk.md) |
@@ -138,7 +138,7 @@ Where to read next:
 | | |
 |---|---|
 | [Architecture](https://github.com/encyc/zen-agent/blob/main/docs/architecture.md) | The layers and what one request touches |
-| [Slash commands](https://github.com/encyc/zen-agent/blob/main/docs/guide/commands.md) | All 54 commands |
+| [Slash commands](https://github.com/encyc/zen-agent/blob/main/docs/guide/commands.md) | All 55 commands |
 | [Configuration](https://github.com/encyc/zen-agent/blob/main/docs/guide/config.md) | `config.toml`, providers, budgets |
 | [Automations](https://github.com/encyc/zen-agent/blob/main/docs/guide/automations.md) | Scheduled rounds and the per-project daemon |
 | [Contracts](https://github.com/encyc/zen-agent/blob/main/docs/reference/contracts.md) | The invariants the kernel is built on |

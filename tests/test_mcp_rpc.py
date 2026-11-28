@@ -237,3 +237,55 @@ async def test_unknown_servers_and_ops_are_rejected(runtime_factory, monkeypatch
     bad_op = await call(server, writes, {"type": "mcp", "op": "edit"})
     assert bad_op["type"] == "error"
     assert "edit" in bad_op["message"]
+
+
+async def test_builtin_rows_are_listed_and_switched(runtime_factory, monkeypatch, tmp_path):
+    """Builtin servers live outside both mcp.json layers: their own op, own rows."""
+    from zenagent.mcp import builtin
+
+    isolate_layers(monkeypatch, tmp_path)
+    runtime = await runtime_factory()
+    writes: list[str] = []
+    server = build_server(runtime, writes)
+
+    listed = await call(server, writes, {"type": "mcp", "op": "list"})
+    rows = {row["id"]: row for row in listed["builtin"]}
+    assert set(rows) == {builtin.COMPUTE_USE_ID}
+    assert rows[builtin.COMPUTE_USE_ID]["label"] == "Computer Use"
+    assert rows[builtin.COMPUTE_USE_ID]["enabled"] is False
+    # A builtin row must never carry a command line: the user did not author it.
+    assert "command" not in rows[builtin.COMPUTE_USE_ID]
+
+    # This runtime runs with MCP off, so enabling cannot connect: the write must
+    # be rolled back with a readable reason rather than left claiming "on".
+    failed = await call(
+        server,
+        writes,
+        {"type": "mcp", "op": "builtin", "id": builtin.COMPUTE_USE_ID, "enabled": True},
+    )
+    assert failed["ok"] is True
+    assert failed["builtin"][0]["enabled"] is False
+    assert failed["problem"] and "did not connect" in failed["problem"]
+    assert builtin.is_builtin_enabled(builtin.COMPUTE_USE_ID) is False
+
+    # Disabling has to drop the live connection, not just the preference: a row
+    # that says "connected" for a switched-off server is the bug this pins.
+    disabled = await call(
+        server,
+        writes,
+        {"type": "mcp", "op": "builtin", "id": builtin.COMPUTE_USE_ID, "enabled": False},
+    )
+    assert disabled["builtin"][0]["enabled"] is False
+    assert disabled["builtin"][0]["state"] == "off"
+
+
+async def test_builtin_op_rejects_an_unknown_id(runtime_factory, monkeypatch, tmp_path):
+    isolate_layers(monkeypatch, tmp_path)
+    runtime = await runtime_factory()
+    writes: list[str] = []
+    server = build_server(runtime, writes)
+
+    result = await call(
+        server, writes, {"type": "mcp", "op": "builtin", "id": "nope", "enabled": True}
+    )
+    assert result["type"] == "error"

@@ -161,6 +161,11 @@ class Runtime:
         self.plugin_statuses: dict[str, str] = {}
         self._plugin_skill_roots: list[Path] = []
         self._plugin_extension_files: list[str] = []
+        #: Raw tool names a builtin server kept hidden behind its proxy tool
+        #: (``/desktop raw on`` re-exposes them for one session).
+        self._builtin_hidden_tools: list[str] = []
+        #: Per-session escape hatch: expose the builtin server's raw tools.
+        self.desktop_raw: bool = False
         self.hooks: dict[str, list] = {}
         self.extension_files: list[str] = []
         self.before_switch: SwitchHook | None = None

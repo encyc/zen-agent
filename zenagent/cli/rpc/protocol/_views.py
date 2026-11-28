@@ -356,6 +356,18 @@ SHAPES: dict[str, dict] = dict(
             "tools": Field(list_of(STRING)),
             "error": Field(STRING, nullable=True),
         }, doc="One MCP server of the settings list, with its live state."),
+        shape("BuiltinMcpRow", {
+            "id": Field(STRING),
+            "label": Field(STRING),
+            "description": Field(STRING),
+            "version": Field(STRING),
+            "requires_runtime": Field(STRING, nullable=True),
+            "proxy_tool": Field(STRING, nullable=True),
+            "enabled": Field(BOOL),
+            "state": Field(one_of("connected", "failed", "off")),
+            "tools": Field(list_of(STRING)),
+            "error": Field(STRING, nullable=True),
+        }, doc="One builtin MCP server; its definition is pinned by the zen release."),
         shape("PluginCredentialRow", {
             "key": Field(STRING),
             "label": Field(STRING),

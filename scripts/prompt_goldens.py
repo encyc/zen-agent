@@ -20,9 +20,11 @@ sys.path.insert(0, str(ROOT / "tests"))
 
 from prompt_fixtures import CONFIGS, SKILLS, TOOL_GOLDEN_NAMES, TRANSCRIPT, golden_tools
 
+from zenagent.mcp.builtin import COMPUTE_USE_VERSION
 from zenagent.prompts import PromptContext, compose_compact, compose_system
 from zenagent.skills import build_skill_tool, format_skill_entries
 from zenagent.tools.automations import build_automation_tools
+from zenagent.tools.desktop import build_desktop_tool
 from zenagent.tools.sessions import build_session_tools
 from zenagent.tools.task import build_task_tool
 from zenagent.tools.todo import build_todo_tool
@@ -71,6 +73,7 @@ def tool_descriptions() -> dict[str, dict]:
     tools.append(build_skill_tool(list(SKILLS)))
     tools.extend(build_session_tools(Path("/repo")))
     tools.extend(build_automation_tools(Path("/repo")))
+    tools.append(build_desktop_tool(lambda: None, version=COMPUTE_USE_VERSION))
     captured = {
         tool.name: {"chars": len(tool.description), "text": tool.description}
         for tool in tools

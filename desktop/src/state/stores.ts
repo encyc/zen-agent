@@ -7,6 +7,7 @@ import { projectName } from './sessionGroups.ts'
 import type {
   AskQuestion,
   CommandEntry,
+  BuiltinMcpRow,
   McpServerRow,
   ModelEntry,
   PluginCatalogRow,
@@ -365,14 +366,22 @@ export const useSkillsStore = create<SkillsState>((set) => ({
 
 interface McpState {
   servers: McpServerRow[]
+  /** Builtin servers (Computer Use): definitions ship with zen, the switch
+   * lives in settings.json, so these rows have one verb and no command line. */
+  builtin: BuiltinMcpRow[]
   problem: string | null
-  setServers(servers: McpServerRow[], problem: string | null): void
+  setServers(
+    servers: McpServerRow[],
+    builtin: BuiltinMcpRow[],
+    problem: string | null,
+  ): void
 }
 
 export const useMcpStore = create<McpState>((set) => ({
   servers: [],
+  builtin: [],
   problem: null,
-  setServers: (servers, problem) => set({ servers, problem }),
+  setServers: (servers, builtin, problem) => set({ servers, builtin, problem }),
 }))
 
 // ---- plugins ----------------------------------------------------------------

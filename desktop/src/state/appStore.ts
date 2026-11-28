@@ -12,6 +12,7 @@ import type {
   CompactionRecord,
   ErrorFrame,
   LimitsResult,
+  BuiltinMcpRow,
   McpServerRow,
   Mode,
   SecretProviderRow,
@@ -118,6 +119,7 @@ interface AppState {
   rescanSkills(): Promise<Record<string, unknown>>
   toggleSkill(name: string, enabled: boolean): Promise<Record<string, unknown>>
   refreshMcp(): Promise<void>
+  setBuiltinMcp(id: string, enabled: boolean): Promise<Record<string, unknown>>
   addMcpServer(input: McpServerInput): Promise<Record<string, unknown>>
   removeMcpServer(name: string, layer: McpLayer): Promise<Record<string, unknown>>
   testMcpServer(name: string): Promise<Record<string, unknown>>
@@ -469,6 +471,7 @@ export const useAppStore = create<AppState>((set, get) => ({
             .getState()
             .setServers(
               (frame.servers ?? []) as McpServerRow[],
+              (frame.builtin ?? []) as BuiltinMcpRow[],
               typeof frame.problem === 'string' ? frame.problem : null,
             )
         }
@@ -494,6 +497,22 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   testMcpServer(name) {
     return get().client().send({ type: 'mcp', op: 'test', name })
+  },
+
+  async setBuiltinMcp(id, enabled) {
+    const frame = await get()
+      .client()
+      .send({ type: 'mcp', op: 'builtin', id, enabled })
+    if (frame.type === 'result' && frame.ok) {
+      useMcpStore
+        .getState()
+        .setServers(
+          (frame.servers ?? []) as McpServerRow[],
+          (frame.builtin ?? []) as BuiltinMcpRow[],
+          typeof frame.problem === 'string' ? frame.problem : null,
+        )
+    }
+    return frame
   },
 
   async relocateProject(from, to) {

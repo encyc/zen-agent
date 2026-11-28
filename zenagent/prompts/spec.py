@@ -24,7 +24,7 @@ __all__ = [
 
 #: Bumped whenever block content changes; recorded in eval reports and the
 #: prompt CHANGELOG.
-PROMPT_VERSION = "2026-11-26.3"
+PROMPT_VERSION = "2026-11-28.1"
 
 CacheClass = Literal["stable", "session", "volatile"]
 
@@ -228,6 +228,7 @@ TOOL_BLOCK_NAMES: tuple[str, ...] = (
     "read_session",
     "automations",
     "automation_edit",
+    "desktop",
 )
 
 #: Variables a tool block declares; the tool module supplies the values so the
@@ -238,6 +239,9 @@ _TOOL_VARS: dict[str, tuple[str, ...]] = {
     "grep": ("max_grep_files_per_page", "max_grep_hits_per_file"),
     "web_search": ("max_results",),
     "read_skill": ("skill_names",),
+    #: The builtin Computer Use server pin; the description names the version it
+    #: maps to, so a stale mapping is visible in the prompt itself.
+    "desktop": ("version",),
 }
 
 for _tool_name in TOOL_BLOCK_NAMES:
