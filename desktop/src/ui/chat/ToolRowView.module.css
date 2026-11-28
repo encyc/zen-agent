@@ -193,6 +193,31 @@
   min-width: 0;
 }
 
+/* The read_image card's expanded preview: same chrome as the IN/OUT card,
+ * the picture contained so a tall screenshot cannot run the lane. */
+.imageCard {
+  display: flex;
+  justify-content: center;
+  border-radius: 10px;
+  background: var(--dsw-alias-markdown-code-block);
+  border: 1px solid var(--ds-hairline);
+  padding: 8px;
+}
+
+.imagePreview {
+  display: block;
+  max-width: 100%;
+  max-height: 320px;
+  object-fit: contain;
+  border-radius: 6px;
+}
+
+.imageNote {
+  font-size: var(--ds-font-11);
+  line-height: 14px;
+  color: var(--dsw-alias-label-caption);
+}
+
 .diffWrap {
   display: flex;
   flex-direction: column;

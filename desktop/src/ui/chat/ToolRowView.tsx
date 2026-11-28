@@ -2,11 +2,15 @@
  * title, summary, state cue, duration/diff totals suffix, and a lazily
  * mounted body (diff block, terminal-ish output, or IN/OUT card). */
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import clsx from 'clsx'
 import type { ToolNode } from '../../state/chatStore'
+import { useAppStore } from '../../state/appStore'
 import { useWorkPanelStore } from '../../state/stores'
 import { useT } from '../../i18n/locale'
+import type { FsReadResult, WorkspaceFile } from '../../rpc/types'
+import { toWorkspacePath } from '../rightbar/workspacePath'
+import { readImageTarget } from './readImagePreview'
 import {
   ActivityIcon,
   BotIcon,
@@ -30,6 +34,7 @@ const OUTPUT_MAX_CHARS = 8000
 
 const FAMILY_ICONS: Record<string, (props: { size?: number }) => React.ReactNode> = {
   read_file: FileIcon,
+  read_image: FileIcon,
   list_dir: FileIcon,
   glob: SearchIcon,
   grep: SearchIcon,
@@ -50,6 +55,7 @@ export type ToolFamily = 'read' | 'search' | 'exec' | 'write' | 'edit' | 'think'
 
 const TOOL_FAMILIES: Record<string, ToolFamily> = {
   read_file: 'read',
+  read_image: 'read',
   list_dir: 'read',
   glob: 'search',
   grep: 'search',
@@ -78,6 +84,7 @@ function summaryFor(node: ToolNode): string {
     case 'wait':
       return get('command') || node.argsPreview
     case 'read_file':
+    case 'read_image':
     case 'write_file':
     case 'edit_file':
     case 'list_dir':
@@ -150,6 +157,41 @@ export function ToolRowView({ node }: { node: ToolNode }) {
     : ''
   const Icon = FAMILY_ICONS[node.name] ?? FileIcon
   const family = TOOL_FAMILIES[node.name]
+  const target = useMemo(() => readImageTarget(node), [node])
+  const [image, setImage] = useState<WorkspaceFile | null>(null)
+  const [imageState, setImageState] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
+
+  // The image loads on first expansion (user request): the folded card stays
+  // as-is and no bytes move until the person opens the body. One fetch per
+  // card — `imageState` leaves `idle` and never returns, so collapse/reopen
+  // reuses what already arrived.
+  useEffect(() => {
+    if (!open || target === null || imageState !== 'idle') return
+    let stale = false
+    setImageState('loading')
+    const path = toWorkspacePath(target.path, useAppStore.getState().project)
+    useAppStore
+      .getState()
+      .client()
+      .send<FsReadResult>({ type: 'fs_read', path }, 8000)
+      .then((result) => {
+        if (stale) return
+        // read_image only ever produces images, but the file may have changed
+        // since the call ran; anything else reads as a failed preview.
+        if (result.ok === true && result.file.kind === 'image') {
+          setImage(result.file)
+          setImageState('ready')
+        } else {
+          setImageState('error')
+        }
+      })
+      .catch(() => {
+        if (!stale) setImageState('error')
+      })
+    return () => {
+      stale = true
+    }
+  }, [open, target, imageState])
 
   return (
     <div
@@ -220,6 +262,19 @@ export function ToolRowView({ node }: { node: ToolNode }) {
       </button>
       {open && (
         <div className={css.bodyWrap}>
+          {target !== null && (
+            <div className={css.imageCard}>
+              {imageState === 'loading' && (
+                <div className={css.imageNote}>{t('panel.files.loading')}</div>
+              )}
+              {imageState === 'error' && (
+                <div className={css.imageNote}>{t('panel.files.error')}</div>
+              )}
+              {image !== null && image.kind === 'image' && (
+                <img className={css.imagePreview} src={image.data_url} alt={target.path} />
+              )}
+            </div>
+          )}
           {diff !== null && (
             <div className={css.diffWrap}>
               <div className={css.blockHead}>
