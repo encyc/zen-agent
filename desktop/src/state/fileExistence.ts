@@ -15,6 +15,7 @@
 import { useEffect, useMemo } from 'react'
 import { create } from 'zustand'
 import type { FsExistsResult } from '../rpc/types.ts'
+import { toWorkspacePath } from '../ui/rightbar/workspacePath.ts'
 import { useAppStore } from './appStore.ts'
 
 const REQUEST_TIMEOUT_MS = 8000
@@ -45,7 +46,13 @@ export const useFileExistenceStore = create<FileExistenceState>((set, get) => ({
         path,
         Promise.resolve().then(async () => {
           try {
-            const result = (await send({ type: 'fs_exists', path })) as Partial<FsExistsResult> & {
+            // The server roots its fs ops at the project, so a reference is
+            // probed by its folded form — an absolute path inside the project
+            // folds relative, anything outside stays as-is and refuses with
+            // `fs_error`. The verdict still keys on the raw spelling: that is
+            // what the renderer looks up.
+            const rel = toWorkspacePath(path, useAppStore.getState().project)
+            const result = (await send({ type: 'fs_exists', path: rel })) as Partial<FsExistsResult> & {
               code?: unknown
             }
             let verdict: boolean | null = null
