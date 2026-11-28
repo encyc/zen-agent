@@ -457,3 +457,18 @@ def test_supports_vision_is_parsed_and_defaults_to_false():
     assert find_model(catalog, "deepseek-flash").supports_vision is True
     assert find_model(catalog, "deepseek-v4-pro").supports_vision is False
     assert find_model(catalog, "glm-5.3").supports_vision is False
+
+
+def test_vision_flags_follow_the_2026_11_28_live_probe():
+    from zenagent.providers.catalog import resolve_model_ref
+
+    catalog = load_catalog()
+    for ref in (
+        "opencode-go/deepseek-v4.1-flash",
+        "opencode-go/claude-haiku-5-5",
+        "zai-coding-cn/glm-5.3-flash",
+    ):
+        assert resolve_model_ref(catalog, ref).supports_vision is True, ref
+    # Both answered HTTP 400 to an image part: text-only, whatever the family.
+    for ref in ("zai-coding-cn/glm-5.3", "opencode-go/glm-5.3"):
+        assert resolve_model_ref(catalog, ref).supports_vision is False, ref
