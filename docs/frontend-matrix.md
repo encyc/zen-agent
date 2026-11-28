@@ -73,7 +73,7 @@ slot 级 kind（`RpcServer`）：`hello` `prompt` `cancel` `status` `shutdown` `
 
 | 域 | actions |
 |---|---|
-| `session` | current · list · new · fork · resume · import · undo · delete · compact · retry · export · promote · dequeue · interrupt_pending · clear_continuations · clear_pending · clear_todos |
+| `session` | current · list · new · fork · resume · import · undo · delete · archive · compact · retry · export · promote · dequeue · interrupt_pending · clear_continuations · clear_pending · clear_todos |
 | `runs` | list · get |
 | `project`(host) | open/switch · close · relocate |
 | `terminal` | start · write · resize · close |

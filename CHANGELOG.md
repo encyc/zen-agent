@@ -7,6 +7,16 @@ matches the release tag; older history is in the repository tags and commits.
 
 ### Added
 
+- **Sessions can be archived.** A session row's menu gains 归档: the transcript
+  file stays exactly where it is (an `.archive.json` sidecar next to it holds
+  the archived-at stamp), but the row leaves the sidebar, the command palette
+  and `zen sessions list`. Settings → Projects grows a per-project 已归档
+  section that lists what was put away and restores any of it with one click.
+  The model's session tools (`list_sessions` / `search_sessions` /
+  `read_session`) still see archived sessions — marked `(archived)` — because
+  archiving tidies the sidebar, not the model's memory; `--resume latest`
+  skips them.
+
 - **The ask card folds to one status row.** A chevron at the right of the
   status strip collapses the card to icon · title · `1/3` · progress dots ·
   queued count, and the progress dots keep working while folded — clicking one

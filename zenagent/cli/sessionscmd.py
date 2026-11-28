@@ -25,6 +25,9 @@ def build_parser() -> argparse.ArgumentParser:
     list_parser.add_argument(
         "--all", action="store_true", help="include every project and legacy sessions"
     )
+    list_parser.add_argument(
+        "--archived", action="store_true", help="list only archived sessions"
+    )
     list_parser.add_argument("--json", action="store_true", help="emit JSON")
 
     adopt_parser = subcommands.add_parser(
@@ -35,10 +38,13 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _list(all_projects: bool, as_json: bool) -> int:
+def _list(all_projects: bool, as_json: bool, archived_only: bool = False) -> int:
     from zenagent.agent.session import list_sessions
 
-    infos = list_sessions(scope="all" if all_projects else "project")
+    infos = list_sessions(
+        scope="all" if all_projects else "project",
+        archived="only" if archived_only else "exclude",
+    )
     if as_json:
         print(
             json.dumps(
@@ -49,6 +55,8 @@ def _list(all_projects: bool, as_json: bool) -> int:
                         "project": info.project,
                         "messages": info.messages,
                         "mtime": info.mtime,
+                        "archived": info.archived,
+                        "archived_at": info.archived_at,
                     }
                     for info in infos
                 ],
@@ -87,7 +95,7 @@ def _adopt(target: str) -> int:
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.action == "list":
-        return _list(args.all, args.json)
+        return _list(args.all, args.json, archived_only=args.archived)
     if args.action == "adopt":
         return _adopt(args.session)
     return 2
