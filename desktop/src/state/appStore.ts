@@ -538,7 +538,14 @@ export const useAppStore = create<AppState>((set, get) => ({
     const frame = await get()
       .client()
       .send({ type: 'project', op: 'relocate', from, to })
-    if (frame.type === 'result' && frame.ok) await get().refreshSessions()
+    if (frame.type === 'result' && frame.ok) {
+      // The archive sidecar moves with the state dir: the settings page's
+      // archived rows would keep pointing at the old root until refreshed.
+      await Promise.all([
+        get().refreshSessions(),
+        get().refreshArchivedSessions(),
+      ])
+    }
     return frame
   },
 

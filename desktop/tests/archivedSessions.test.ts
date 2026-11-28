@@ -162,3 +162,57 @@ test('refreshArchivedSessions fills the archived store from the only listing', a
   assert.equal(list?.scope, 'all')
   assert.deepEqual(useArchivedStore.getState().archived, [ARCHIVED_ROW])
 })
+
+test('relocating a project re-roots the archived listing too', async () => {
+  const payloads: Record<string, unknown>[] = []
+  let archived: string[] = [OTHER]
+  let projectRoot = '/work/p'
+  const row = (path: string) => ({
+    ...ARCHIVED_ROW,
+    path,
+    name: path.split('/').pop()?.replace(/\.jsonl$/, ''),
+    project_path: projectRoot,
+  })
+  const bridge: Bridge = {
+    async invoke<T>(command: string, args?: Record<string, unknown>): Promise<T> {
+      const payload = (args?.payload ?? {}) as Record<string, unknown>
+      payloads.push(payload)
+      const id = String(payload.id ?? '')
+      const ok = (extra: Record<string, unknown> = {}) =>
+        ({ type: 'result', id, ok: true, ...extra }) as T
+      if (payload.type === 'project' && payload.op === 'relocate') {
+        // The sidecar moves with the state dir; rows re-root to the new path.
+        projectRoot = String(payload.to)
+        return ok({ root: payload.to, key: 'p2', sessions: 1, moved: 1 }) as T
+      }
+      if (payload.type === 'session' && payload.op === 'list') {
+        const sessions =
+          payload.archived === 'only'
+            ? archived.map((path) => row(path))
+            : []
+        return ok({ scope: payload.scope, sessions }) as T
+      }
+      return ok() as T
+    },
+    async listen<T>(): Promise<() => void> {
+      return () => {}
+    },
+    async relaunch(): Promise<void> {},
+  }
+  _useBridge(bridge)
+  _resetClientForTests()
+  useArchivedStore.getState().setArchived([])
+
+  await useAppStore.getState().relocateProject('/work/p', '/work/p2')
+
+  const ops = payloads.map((payload) => `${payload.type}:${payload.op}`)
+  assert.ok(ops.includes('session:list'), 'relocate must refresh the session listing')
+  const archivedList = payloads.find(
+    (payload) => payload.type === 'session' && payload.op === 'list' && payload.archived === 'only',
+  )
+  assert.ok(archivedList, 'relocate must refresh the archived listing too')
+  assert.deepEqual(
+    useArchivedStore.getState().archived.map((session) => session.project_path),
+    ['/work/p2'],
+  )
+})

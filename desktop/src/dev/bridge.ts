@@ -615,6 +615,12 @@ export function installBridge(state: BridgeState) {
       case 'session':
         switch (payload.op) {
           case 'list':
+            // The mock never archives anything: an `archived: 'only'` listing
+            // (the settings panel's data) answers empty, like a real store
+            // with an empty .archive.json sidecar would.
+            if (payload.archived === 'only') {
+              return { type: 'result', id: payload.id, ok: true, scope: payload.scope, sessions: [] }
+            }
             return sessions(payload.id, payload.scope)
           case 'resume':
             currentSessionPath = String(payload.path)
