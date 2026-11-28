@@ -22,6 +22,8 @@ export interface ProjectRowData {
   name: string
   registered: boolean
   stat: ProjectStat
+  /** Sessions put away in the archive sidecar; never in `stat.sessions`. */
+  archived: number
 }
 
 const EMPTY_STAT: ProjectStat = { sessions: 0, last: 0 }
@@ -34,6 +36,7 @@ function baseName(path: string): string {
 export function projectRows(
   sessions: Pick<SessionSummary, 'project_path' | 'updated_at'>[],
   entries: RegisteredProject[],
+  archivedSessions: Pick<SessionSummary, 'project_path'>[] = [],
 ): ProjectRowData[] {
   const stats = new Map<string, ProjectStat>()
   for (const session of sessions) {
@@ -46,18 +49,42 @@ export function projectRows(
     })
   }
 
+  const archivedCounts = new Map<string, number>()
+  for (const session of archivedSessions) {
+    const root = session.project_path ?? ''
+    if (root === '') continue
+    archivedCounts.set(root, (archivedCounts.get(root) ?? 0) + 1)
+  }
+
   const rows: ProjectRowData[] = []
+  const makeRow = (
+    root: string,
+    stat: ProjectStat,
+    entry: RegisteredProject | undefined,
+  ): ProjectRowData => ({
+    path: entry?.path ?? root,
+    root,
+    name: entry?.name ?? baseName(root),
+    registered: entry !== undefined,
+    stat,
+    archived: archivedCounts.get(root) ?? 0,
+  })
   for (const [root, stat] of stats) {
-    const entry = entries.find(
-      (project) => project.path === root || project.path.startsWith(`${root}/`),
+    rows.push(
+      makeRow(
+        root,
+        stat,
+        entries.find(
+          (project) => project.path === root || project.path.startsWith(`${root}/`),
+        ),
+      ),
     )
-    rows.push({
-      path: entry?.path ?? root,
-      root,
-      name: entry?.name ?? baseName(root),
-      registered: entry !== undefined,
-      stat,
-    })
+  }
+  // A project whose every session is archived still deserves its row: the
+  // settings page is where its history comes back from.
+  for (const [root] of archivedCounts) {
+    if (stats.has(root)) continue
+    rows.push(makeRow(root, EMPTY_STAT, undefined))
   }
 
   for (const entry of entries) {
@@ -71,6 +98,7 @@ export function projectRows(
       name: entry.name,
       registered: true,
       stat: EMPTY_STAT,
+      archived: 0,
     })
   }
 

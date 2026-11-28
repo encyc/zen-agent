@@ -7,6 +7,8 @@ const session = (root: string, updated: number) => ({
   updated_at: updated,
 })
 
+const archived = (root: string) => ({ project_path: root })
+
 test('session-only projects join the page with their counts', () => {
   assert.deepEqual(
     projectRows([session('/w/p', 3), session('/w/p', 7)], []),
@@ -17,6 +19,7 @@ test('session-only projects join the page with their counts', () => {
         name: 'p',
         registered: false,
         stat: { sessions: 2, last: 7 },
+        archived: 0,
       },
     ],
   )
@@ -34,6 +37,7 @@ test('a registered folder inside the root marks the row as registered', () => {
         name: 'p-src',
         registered: true,
         stat: { sessions: 1, last: 3 },
+        archived: 0,
       },
     ],
   )
@@ -49,6 +53,7 @@ test('registered folders without sessions are listed after active projects', () 
         name: 'p',
         registered: false,
         stat: { sessions: 1, last: 5 },
+        archived: 0,
       },
       {
         path: '/w/empty',
@@ -56,6 +61,7 @@ test('registered folders without sessions are listed after active projects', () 
         name: 'empty',
         registered: true,
         stat: { sessions: 0, last: 0 },
+        archived: 0,
       },
     ],
   )
@@ -91,4 +97,30 @@ test('rows sort by last activity, newest first', () => {
     rows.map((row) => row.name),
     ['new', 'old'],
   )
+})
+
+test('archived sessions count per project without entering the active stats', () => {
+  const rows = projectRows(
+    [session('/w/p', 7)],
+    [],
+    [archived('/w/p'), archived('/w/p'), archived('/w/q')],
+  )
+  const p = rows.find((row) => row.root === '/w/p')
+  const q = rows.find((row) => row.root === '/w/q')
+  assert.equal(p?.archived, 2)
+  assert.equal(p?.stat.sessions, 1, 'archived rows never inflate the active count')
+  assert.equal(q?.archived, 1)
+})
+
+test('archived rows without a project path are ignored', () => {
+  const rows = projectRows([], [], [archived('')])
+  assert.deepEqual(rows, [])
+})
+
+test('a project with only archived sessions still gets a row', () => {
+  const rows = projectRows([], [], [archived('/w/p')])
+  assert.equal(rows.length, 1)
+  assert.equal(rows[0]?.archived, 1)
+  assert.equal(rows[0]?.stat.sessions, 0)
+  assert.equal(rows[0]?.stat.last, 0)
 })
