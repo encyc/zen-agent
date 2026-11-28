@@ -7,6 +7,46 @@ matches the release tag; older history is in the repository tags and commits.
 
 ### Added
 
+- **Computer Use: a builtin MCP server, off until you switch it on.** Vercel's
+  `agent-desktop` gives an agent computer use through the OS accessibility tree
+  (macOS AX / Windows UI Automation / Linux AT-SPI) instead of screenshots and
+  pixel matching: `snapshot` an app into a tree of elements each carrying a
+  `ref`, act on a ref, read again to confirm. It ships as a *builtin* server
+  rather than a plugin, because it needs no credentials, no bundled skill and no
+  install directory — the definition and its pin (`COMPUTE_USE_VERSION`) belong
+  to the zen release, and only the switch is yours, in
+  `settings.json` → `prefs.builtin_mcp`. Nothing is written to `mcp.json`: a pin
+  copied into a user file cannot be moved by an upgrade, which is the one
+  property this layer exists to guarantee. Builtins are the lowest merge layer,
+  so a definition of your own with the same name still wins, and an untrusted
+  project override falls back to the builtin instead of taking it down.
+  Enable it in Settings → MCP → Builtin (the card names the pinned
+  `agent-desktop` version and the `npx` requirement, and rolls the switch back
+  if it cannot connect), or with `zen mcp enable compute-use`. macOS needs the
+  Accessibility grant for the app that launches zen; the OS permission, not
+  zen's approval prompt, is the real boundary.
+- **The 75 upstream tools are folded behind one `desktop` tool.** `agent-desktop`
+  publishes 75 MCP tools whose schemas total ~44 KB — six times every builtin
+  tool this agent ships, combined — and not one of them declares
+  `readOnlyHint`. Hung raw on the model that is a large prompt slice per request
+  *and* one approval per click. So `desktop` takes `action=` plus flat arguments
+  (upstream names: `ref`/`text`/`app`/`value`/`combo`), dispatches to
+  `desktop_<action>`, and only forwards arguments it declares, so a model cannot
+  smuggle an unadvertised flag. The tool costs 895 characters of description and
+  1501 bytes of schema; `action=help` returns the binary's own version-matched
+  guide. `/desktop raw on` exposes the raw set for one session (paying the 44 KB)
+  — never persisted — and `/desktop` shows what is on.
+- **Read-only actions skip the approval prompt.** A proxy tool can be one
+  declaration that both reads and writes, so `AgentTool` now carries
+  `read_only_arg` / `read_only_values`: the permission gate downgrades a call to
+  read when the named argument holds one of the values. For `desktop` that means
+  `snapshot`/`find`/`get`/`is`/`screenshot`/`status`/`permissions`/`list_apps`/
+  `list_windows`/`help` work in plan mode and under `--read-only`, while
+  `click`/`type`/`press`/`drag`/`launch` stay `write` and stay gated.
+- **`zen mcp` grew the builtin switch.** `zen mcp enable|disable compute-use`
+  writes the preference and says it takes effect next session (a headless
+  process has no runtime to re-assemble); bare `zen mcp` lists the builtin row
+  beside the project-trust list.
 - **The ask card folds to one status row.** A chevron at the right of the
   status strip collapses the card to icon · title · `1/3` · progress dots ·
   queued count, and the progress dots keep working while folded — clicking one
@@ -19,6 +59,10 @@ matches the release tag; older history is in the repository tags and commits.
 
 ### Changed
 
+- **`/desktop` joins the slash surface (55 commands).** It reads the builtin
+  server's state, switches it on or off, and opens the raw-tool escape hatch;
+  `/mcp` gained a line for the builtin row, because a builtin server appears in
+  neither `mcp.json` layer and `/mcp` is where a user looks first.
 - **The ask card is a transcript row, not a layer over it.** It used to ride
   the floating composer dock: fine while the reader sat at the tail, but once
   they scrolled up looking for context the card kept hanging over the lower
@@ -48,6 +92,24 @@ matches the release tag; older history is in the repository tags and commits.
 
 ### Fixed
 
+- **The desktop shell runs with MCP on.** It spawned its child with `--no-mcp`
+  from the first shell commit, so `runtime.mcp` was `None` in the GUI: every
+  server on the MCP page read "off", every plugin read "ready" but could not be
+  reached, and enabling a builtin answered "did not connect". `/mcp test` still
+  connected, because that probe owns its own client — which is what made it look
+  like the server was broken. The flag is gone; a test pins it, and
+  `docs/frontend-matrix.md` records the trap so no future shell re-adds it.
+- **A builtin switch that cannot connect says why.** Three distinct causes were
+  folded into one `unknown error`: MCP disabled for this process, no manager
+  running, and a server that started and failed. Each now gets its own sentence,
+  and the write is rolled back so a switch never claims "on" with nothing behind
+  it.
+- **A request field may not be named `id` or `type`.** The client stamps both on
+  every send, so `{"op": "builtin", "id": "compute-use"}` arrived with `id`
+  replaced by the correlation id and the handler looked up a server literally
+  called `ral1u57`. The builtin switch now uses `name` (the `plugin` field's
+  precedent). `protocol.validate_registry()` rejects any request model declaring
+  an envelope key, so the next one is caught before it ships.
 - **Subagents no longer fail on a gateway that routes by session id.** The
   `task` tool built its child agent without a session id, so every child
   request went out without the `x-opencode-session` header and `opencode-go`
