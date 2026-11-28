@@ -233,7 +233,10 @@ async def assemble(
             thinking = "high" if model.reasoning else "off"
         # The task tool spawns child agents; the child inherits the parent's
         # model/stream, follows the session artifact sink, and mirrors the
-        # parent's live tool set and permission mode at each dispatch.
+        # parent's live tool set and permission mode at each dispatch. Each
+        # child gets its own gateway session id (never the parent's): a
+        # subagent is its own session, and opencode-go refuses requests
+        # without one.
         runtime.task_tool = build_task_tool(
             model=lambda: runtime.agent.model,
             base_tools=base_tools(
@@ -247,6 +250,7 @@ async def assemble(
             live_tools=lambda: runtime.tool_registry.active(),
             mode=lambda: runtime.mode,
             resolve_model=lambda raw: resolve_task_model(runtime.catalog, raw),
+            session_id_for=session_id_for,
             # [task]: the child's watchdog and transcript retention caps.
             timeout_s=runtime.user_config.task_timeout_s,
             limits=SubagentLimits.from_user_config(runtime.user_config),

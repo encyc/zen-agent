@@ -75,6 +75,7 @@ def build_task_tool(
     live_tools: Callable[[], Sequence[AgentTool]] | None = None,
     mode: str | Callable[[], str | None] | None = None,
     resolve_model: Callable[[str], tuple[Model, str]] | None = None,
+    session_id_for: Callable[[Model], str | None] | None = None,
     artifact_sink: ArtifactSink | None = None,
     session_path: Path | None = None,
     limits: SubagentLimits | None = None,
@@ -92,7 +93,12 @@ def build_task_tool(
     MCP refreshes and ``/mode`` switches apply to the next spawn. A ``model``
     argument resolves through ``resolve_model`` (catalog + api key) and, when
     present, overrides the parent's model for that child — thinking follows
-    the resolved model's ``reasoning`` flag. ``timeout_s`` and ``limits`` come
+    the resolved model's ``reasoning`` flag. ``session_id_for`` maps each
+    dispatch's resolved model to the child's gateway session id (the parent
+    never shares its own: a child is its own session), so gateways that route
+    on one — opencode-go — accept child requests; ``None`` leaves the child
+    without an id, which only non-routing providers accept. ``timeout_s`` and
+    ``limits`` come
     from ``[task]`` in config.toml
     (``zenagent.config``); ``timeout_s <= 0`` disables the wall-clock watchdog.
     ``before_tool_call`` is the parent's harness gate: every child tool call
@@ -173,6 +179,12 @@ def build_task_tool(
                     error_kind="invalid_arguments",
                 )
             live_thinking = "high" if live_model.reasoning else "off"
+        # The child's session id follows the dispatch's resolved model, frozen
+        # here like the model itself — a background child keeps both even if
+        # the session moves on.
+        child_session_id = (
+            session_id_for(live_model) if session_id_for is not None else None
+        )
         available = _live(live_tools) if live_tools is not None else base_tools
         auto = (_live(mode) or "") == "auto"
         child_tools = [tool for tool in available if child_allowed(tool, auto=auto)]
@@ -210,6 +222,7 @@ def build_task_tool(
                 child_tools=child_tools,
                 artifact_sink=artifact_sink,
                 before_tool_call=before_tool_call,
+                session_id=child_session_id,
             )
             run = get_task_manager().start(
                 tool_call_id,
@@ -250,6 +263,7 @@ def build_task_tool(
             child_tools=child_tools,
             artifact_sink=artifact_sink,
             before_tool_call=before_tool_call,
+            session_id=child_session_id,
         )
 
         abort_task: asyncio.Task | None = None
@@ -319,8 +333,9 @@ def build_task_tool(
                 "model": {
                     "type": "string",
                     "description": (
-                        "Model for this child (bare id or provider/id); "
-                        "defaults to this session's model."
+                        "Model for this child as provider/model-id (a bare id "
+                        "is refused; the error names the close matches); "
+                        "omit it to use this session's live model."
                     ),
                 },
             },

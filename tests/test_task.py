@@ -67,10 +67,12 @@ class ChildStream:
         self.usage = usage or Usage(input=10, output=20, cost=Cost(total=0.001))
         self.tools_seen: list[list[str]] = []
         self.models_seen: list[str] = []
+        self.session_ids_seen: list[str | None] = []
 
     async def __call__(self, model, messages, tools, options):
         self.tools_seen.append([tool.name for tool in tools])
         self.models_seen.append(model.id)
+        self.session_ids_seen.append(options.session_id)
         partial = AssistantMessage(
             content=[],
             provider="p",
@@ -774,6 +776,75 @@ async def test_task_model_missing_key_fails_fast_naming_env():
 
     assert result.is_error
     assert "ZAI_API_KEY" in result.content[0].text
+
+
+# --- child gateway session id -------------------------------------------------
+
+
+async def test_child_carries_a_session_id_when_the_resolver_says_so():
+    stream = ChildStream()
+    tool = build_task_tool(
+        model=_model(),
+        api_key="k",
+        stream_fn=stream,
+        base_tools=_tools(),
+        session_id_for=lambda m: "sid-parent-model",
+    )
+
+    await tool.execute("t1", {"prompt": "go"})
+
+    assert stream.session_ids_seen == ["sid-parent-model"]
+
+
+async def test_child_session_id_follows_the_model_override():
+    second = _model()
+    second.id = "second-model"
+    second.provider = "gateway"
+    stream = ChildStream()
+    tool = build_task_tool(
+        model=_model(),
+        api_key="k",
+        stream_fn=stream,
+        base_tools=_tools(),
+        resolve_model=lambda raw: (second, "other-key"),
+        session_id_for=lambda m: (
+            "sid-parent-model" if m.provider == "test" else "sid-gateway"
+        ),
+    )
+
+    await tool.execute("t1", {"prompt": "go", "model": "gateway/second-model"})
+
+    # The id keys off the dispatch's resolved model, not the parent's.
+    assert stream.session_ids_seen == ["sid-gateway"]
+
+
+async def test_child_has_no_session_id_without_a_resolver():
+    stream = ChildStream()
+    tool = _tool(stream)
+
+    await tool.execute("t1", {"prompt": "go"})
+
+    assert stream.session_ids_seen == [None]
+
+
+async def test_async_child_freezes_its_session_id_at_dispatch():
+    from zenagent.agent.subagents_runtime import get_task_manager
+
+    stream = ChildStream()
+    tool = build_task_tool(
+        model=_model(),
+        api_key="k",
+        stream_fn=stream,
+        base_tools=_tools(),
+        session_id_for=lambda m: "sid-async",
+    )
+
+    result = await tool.execute("t1", {"prompt": "go", "async": True})
+    run = await get_task_manager().wait(result.details["task_id"], timeout_s=5)
+
+    assert run.details["status"] == "ok"
+    assert stream.session_ids_seen == ["sid-async"]
+    await get_task_manager().close()
 
 
 

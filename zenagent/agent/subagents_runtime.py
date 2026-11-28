@@ -632,6 +632,7 @@ def construct_child(
     child_tools: list[AgentTool],
     artifact_sink: ArtifactSink | None,
     before_tool_call: Callable | None,
+    session_id: str | None = None,
 ) -> Agent:
     guard = ContextGuard(model.context_window)
     child = Agent(
@@ -644,6 +645,9 @@ def construct_child(
                 transform_context=guard.transform,
                 artifact_sink=artifact_sink,
                 before_tool_call=before_tool_call,
+                # Gateways that route on a session id (opencode-go) need it
+                # on child requests too, or they refuse with a 400.
+                session_id=session_id,
             )
     child.subscribe(guard.on_event)
     return child
